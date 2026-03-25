@@ -5,10 +5,12 @@ import os
 import subprocess
 import uuid
 import shutil
+import mimetypes
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response
 
 app = Flask(__name__, static_folder="static")
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB upload limit
 
 # Config
 UPLOAD_DIR = Path("/tmp/yt-storage-uploads")
@@ -17,7 +19,6 @@ MEDIA_STORAGE_BIN = os.environ.get(
     "MEDIA_STORAGE_BIN",
     os.path.expanduser("~/yt-media-storage/build/media_storage")
 )
-MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -130,11 +131,26 @@ def decode_file():
 
 @app.route("/api/download/<filename>")
 def download_file(filename):
-    """Download a processed file."""
+    """Download a processed file with streaming for large files."""
     filepath = OUTPUT_DIR / filename
     if not filepath.exists():
         return jsonify({"error": "File not found"}), 404
-    return send_file(str(filepath), as_attachment=True)
+
+    file_size = filepath.stat().st_size
+    mime_type = mimetypes.guess_type(str(filepath))[0] or "application/octet-stream"
+
+    def generate():
+        with open(filepath, "rb") as f:
+            while True:
+                chunk = f.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+
+    response = Response(generate(), mimetype=mime_type)
+    response.headers["Content-Length"] = file_size
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 @app.route("/api/status")
