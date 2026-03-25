@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YT Media Storage — Web GUI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --bg-card: #12121a;
+      --bg-card-hover: #1a1a28;
+      --border: #1e1e30;
+      --text: #e4e4ef;
+      --text-dim: #8888a4;
+      --accent: #6c5ce7;
+      --accent-glow: rgba(108, 92, 231, 0.3);
+      --green: #00e676;
+      --green-glow: rgba(0, 230, 118, 0.2);
+      --red: #ff5252;
+      --red-glow: rgba(255, 82, 82, 0.2);
+      --orange: #ff9100;
+      --radius: 14px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6c5ce7, #a29bfe, #fd79a8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.3rem;
+    }
+
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+
+    .subtitle a { color: var(--accent); text-decoration: none; }
+    .subtitle a:hover { text-decoration: underline; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+
+    .status-badge.online {
+      background: var(--green-glow);
+      color: var(--green);
+      border: 1px solid rgba(0,230,118,0.3);
+    }
+
+    .status-badge.offline {
+      background: var(--red-glow);
+      color: var(--red);
+      border: 1px solid rgba(255,82,82,0.3);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 700px) {
+      .container { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 30px var(--accent-glow);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-desc {
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .icon { font-size: 1.3rem; }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(108, 92, 231, 0.05);
+    }
+
+    .drop-zone input { display: none; }
+
+    .drop-zone .label {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    .drop-zone .filename {
+      font-size: 0.8rem;
+      color: var(--accent);
+      margin-top: 0.5rem;
+      word-break: break-all;
+    }
+
+    .field {
+      margin-bottom: 0.8rem;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    .field input, .field select {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.85rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .field input:focus, .field select:focus {
+      border-color: var(--accent);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-encode {
+      background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+      color: #fff;
+    }
+
+    .btn-decode {
+      background: linear-gradient(135deg, #00b894, #00e676);
+      color: #000;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px var(--accent-glow);
+    }
+
+    .btn:active { transform: translateY(0); }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    .result {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .result.success {
+      background: var(--green-glow);
+      border: 1px solid rgba(0,230,118,0.3);
+    }
+
+    .result.error {
+      background: var(--red-glow);
+      border: 1px solid rgba(255,82,82,0.3);
+    }
+
+    .result .dl-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      padding: 6px 14px;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+
+    .result .dl-link:hover {
+      background: #7c6cf7;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .info-bar {
+      width: 100%;
+      max-width: 900px;
+      margin-top: 2rem;
+      padding: 1rem 1.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    .info-bar code {
+      background: var(--bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+      font-size: 0.75rem;
+    }
+
+    .size-info {
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      margin-top: 4px;
+    }
+
+    footer {
+      margin-top: 3rem;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>🎬 YT Media Storage</h1>
+  <p class="subtitle">GUI for <a href="https://github.com/PulseBeat02/yt-media-storage" target="_blank">PulseBeat02/yt-media-storage</a></p>
+
+  <div class="status-badge offline" id="statusBadge">
+    <span class="status-dot"></span>
+    <span id="statusText">Checking...</span>
+  </div>
+
+  <div class="container">
+    <!-- ENCODE CARD -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📦</span> Encode</div>
+      <div class="card-desc">Biến file bất kỳ thành video lossless (MKV)</div>
+
+      <div class="drop-zone" id="encodeDropZone" onclick="document.getElementById('encodeFile').click()">
+        <input type="file" id="encodeFile">
+        <div class="label">📁 Kéo thả file hoặc click để chọn</div>
+        <div class="filename" id="encodeFileName"></div>
+      </div>
+
+      <div class="field">
+        <label>🔐 Password (tùy chọn)</label>
+        <input type="password" id="encodePassword" placeholder="Để trống = không mã hóa">
+      </div>
+
+      <div class="field">
+        <label>Checksum</label>
+        <select id="encodeHash">
+          <option value="crc32">CRC32 (mặc định)</option>
+          <option value="xxhash">xxHash32 (nhanh hơn)</option>
+        </select>
+      </div>
+
+      <button class="btn btn-encode" id="encodeBtn" onclick="doEncode()" disabled>
+        <span class="spinner" id="encodeSpinner"></span>
+        <span id="encodeBtnText">Encode → Video</span>
+      </button>
+
+      <div class="result" id="encodeResult"></div>
+    </div>
+
+    <!-- DECODE CARD -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🔓</span> Decode</div>
+      <div class="card-desc">Khôi phục file gốc từ video MKV</div>
+
+      <div class="drop-zone" id="decodeDropZone" onclick="document.getElementById('decodeFile').click()">
+        <input type="file" id="decodeFile" accept=".mkv,.MKV">
+        <div class="label">📁 Kéo thả file MKV hoặc click để chọn</div>
+        <div class="filename" id="decodeFileName"></div>
+      </div>
+
+      <div class="field">
+        <label>🔐 Password (nếu có)</label>
+        <input type="password" id="decodePassword" placeholder="Nhập nếu file đã mã hóa">
+      </div>
+
+      <div class="field">
+        <label>Tên file output</label>
+        <input type="text" id="outputName" placeholder="vd: restored.mp4" value="decoded_file">
+      </div>
+
+      <button class="btn btn-decode" id="decodeBtn" onclick="doDecode()" disabled>
+        <span class="spinner" id="decodeSpinner"></span>
+        <span id="decodeBtnText">Decode → File gốc</span>
+      </button>
+
+      <div class="result" id="decodeResult"></div>
+    </div>
+  </div>
+
+  <div class="info-bar">
+    <strong>💡 Cách hoạt động:</strong><br>
+    <code>Encode</code> — File gốc → chia chunk → Fountain Codes → nhúng vào video frames (FFV1/4K) → file MKV<br>
+    <code>Decode</code> — MKV → extract frames → khôi phục data → file gốc y hệt (lossless)<br>
+    <br>
+    <strong>⚡ Upload lên YouTube:</strong> Video MKV → convert sang MP4 → upload YouTube (unlisted) → tải về bằng <code>yt-dlp</code> → decode lại = file gốc!
+  </div>
+
+  <footer>
+    Powered by <a href="https://github.com/PulseBeat02/yt-media-storage" target="_blank">yt-media-storage</a>
+    &nbsp;·&nbsp; Fountain Codes + FFV1 + XChaCha20
+  </footer>
+
+  <script>
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    // Status check
+    fetch('/api/status')
+      .then(r => r.json())
+      .then(d => {
+        const badge = document.getElementById('statusBadge');
+        const text = document.getElementById('statusText');
+        if (d.binary_exists) {
+          badge.className = 'status-badge online';
+          text.textContent = 'Binary OK';
+        } else {
+          badge.className = 'status-badge offline';
+          text.textContent = 'Binary not found!';
+        }
+      })
+      .catch(() => {
+        document.getElementById('statusText').textContent = 'API Error';
+      });
+
+    // File selection
+    function setupDropZone(zoneId, inputId, nameId, btnId) {
+      const zone = document.getElementById(zoneId);
+      const input = document.getElementById(inputId);
+      const nameEl = document.getElementById(nameId);
+      const btn = document.getElementById(btnId);
+
+      input.addEventListener('change', () => {
+        if (input.files.length) {
+          const f = input.files[0];
+          nameEl.textContent = `${f.name} (${formatSize(f.size)})`;
+          btn.disabled = false;
+        }
+      });
+
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+      zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+          input.files = e.dataTransfer.files;
+          const f = input.files[0];
+          nameEl.textContent = `${f.name} (${formatSize(f.size)})`;
+          btn.disabled = false;
+        }
+      });
+    }
+
+    setupDropZone('encodeDropZone', 'encodeFile', 'encodeFileName', 'encodeBtn');
+    setupDropZone('decodeDropZone', 'decodeFile', 'decodeFileName', 'decodeBtn');
+
+    // Encode
+    async function doEncode() {
+      const file = document.getElementById('encodeFile').files[0];
+      if (!file) return;
+
+      const btn = document.getElementById('encodeBtn');
+      const spinner = document.getElementById('encodeSpinner');
+      const btnText = document.getElementById('encodeBtnText');
+      const result = document.getElementById('encodeResult');
+
+      btn.disabled = true;
+      spinner.style.display = 'inline-block';
+      btnText.textContent = 'Đang encode...';
+      result.style.display = 'none';
+
+      const form = new FormData();
+      form.append('file', file);
+      form.append('password', document.getElementById('encodePassword').value);
+      form.append('hash', document.getElementById('encodeHash').value);
+
+      try {
+        const resp = await fetch('/api/encode', { method: 'POST', body: form });
+        const data = await resp.json();
+
+        if (data.success) {
+          result.className = 'result success';
+          result.innerHTML = `
+            ✅ <strong>Encode thành công!</strong><br>
+            <div class="size-info">
+              📥 Input: ${formatSize(data.input_size)}<br>
+              📤 Output: ${formatSize(data.output_size)}
+            </div>
+            <a class="dl-link" href="${data.download_url}" download>⬇ Tải video MKV</a>
+          `;
+        } else {
+          result.className = 'result error';
+          result.innerHTML = `❌ <strong>Lỗi:</strong> ${data.error}<br><small>${data.stderr || ''}</small>`;
+        }
+      } catch (err) {
+        result.className = 'result error';
+        result.innerHTML = `❌ <strong>Lỗi kết nối:</strong> ${err.message}`;
+      }
+
+      result.style.display = 'block';
+      spinner.style.display = 'none';
+      btnText.textContent = 'Encode → Video';
+      btn.disabled = false;
+    }
+
+    // Decode
+    async function doDecode() {
+      const file = document.getElementById('decodeFile').files[0];
+      if (!file) return;
+
+      const btn = document.getElementById('decodeBtn');
+      const spinner = document.getElementById('decodeSpinner');
+      const btnText = document.getElementById('decodeBtnText');
+      const result = document.getElementById('decodeResult');
+
+      btn.disabled = true;
+      spinner.style.display = 'inline-block';
+      btnText.textContent = 'Đang decode...';
+      result.style.display = 'none';
+
+      const form = new FormData();
+      form.append('file', file);
+      form.append('password', document.getElementById('decodePassword').value);
+      form.append('output_name', document.getElementById('outputName').value || 'decoded_file');
+
+      try {
+        const resp = await fetch('/api/decode', { method: 'POST', body: form });
+        const data = await resp.json();
+
+        if (data.success) {
+          result.className = 'result success';
+          result.innerHTML = `
+            ✅ <strong>Decode thành công!</strong><br>
+            <div class="size-info">📦 Output: ${formatSize(data.output_size)}</div>
+            <a class="dl-link" href="${data.download_url}" download>⬇ Tải file gốc</a>
+          `;
+        } else {
+          result.className = 'result error';
+          result.innerHTML = `❌ <strong>Lỗi:</strong> ${data.error}<br><small>${data.stderr || ''}</small>`;
+        }
+      } catch (err) {
+        result.className = 'result error';
+        result.innerHTML = `❌ <strong>Lỗi kết nối:</strong> ${err.message}`;
+      }
+
+      result.style.display = 'block';
+      spinner.style.display = 'none';
+      btnText.textContent = 'Decode → File gốc';
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>
