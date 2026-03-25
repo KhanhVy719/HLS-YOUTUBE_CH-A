@@ -129,28 +129,22 @@ def decode_file():
         input_path.unlink(missing_ok=True)
 
 
-@app.route("/api/download/<filename>")
+@app.route("/api/download/<path:filename>")
 def download_file(filename):
-    """Download a processed file with streaming for large files."""
+    """Download a processed file."""
     filepath = OUTPUT_DIR / filename
     if not filepath.exists():
-        return jsonify({"error": "File not found"}), 404
+        return jsonify({"error": "File not found", "path": str(filepath)}), 404
+    return send_from_directory(str(OUTPUT_DIR), filename, as_attachment=True)
 
-    file_size = filepath.stat().st_size
-    mime_type = mimetypes.guess_type(str(filepath))[0] or "application/octet-stream"
 
-    def generate():
-        with open(filepath, "rb") as f:
-            while True:
-                chunk = f.read(8192)
-                if not chunk:
-                    break
-                yield chunk
-
-    response = Response(generate(), mimetype=mime_type)
-    response.headers["Content-Length"] = file_size
-    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return response
+@app.route("/api/files")
+def list_files():
+    """List all files in output directory (debug)."""
+    files = []
+    for f in OUTPUT_DIR.iterdir():
+        files.append({"name": f.name, "size": f.stat().st_size})
+    return jsonify({"files": files})
 
 
 @app.route("/api/status")
