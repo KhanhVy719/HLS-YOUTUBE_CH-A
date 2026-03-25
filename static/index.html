@@ -3,564 +3,349 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YT Media Storage — Web GUI</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <title>YouTube HLS Streaming Server</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg: #0a0a0f;
-      --bg-card: #12121a;
-      --bg-card-hover: #1a1a28;
-      --border: #1e1e30;
-      --text: #e4e4ef;
-      --text-dim: #8888a4;
-      --accent: #6c5ce7;
-      --accent-glow: rgba(108, 92, 231, 0.3);
-      --green: #00e676;
-      --green-glow: rgba(0, 230, 118, 0.2);
-      --red: #ff5252;
-      --red-glow: rgba(255, 82, 82, 0.2);
-      --orange: #ff9100;
+      --bg: #0a0a0f; --bg-card: #12121a; --bg-hover: #1a1a28;
+      --border: #1e1e30; --text: #e4e4ef; --dim: #8888a4;
+      --accent: #6c5ce7; --glow: rgba(108,92,231,0.25);
+      --green: #00e676; --red: #ff5252; --orange: #ff9100;
       --radius: 14px;
     }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
-    body {
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem 1rem;
+    /* Header */
+    .header {
+      padding: 1.5rem 2rem; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
     }
+    .logo { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, #ff0000, #ff6b6b, #6c5ce7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .status-pills { display: flex; gap: 10px; }
+    .pill { padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; border: 1px solid var(--border); }
+    .pill.ok { color: var(--green); border-color: rgba(0,230,118,0.3); background: rgba(0,230,118,0.08); }
+    .pill.warn { color: var(--orange); border-color: rgba(255,145,0,0.3); background: rgba(255,145,0,0.08); }
 
-    h1 {
-      font-size: 2rem;
-      font-weight: 700;
-      background: linear-gradient(135deg, #6c5ce7, #a29bfe, #fd79a8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 0.3rem;
+    /* Layout */
+    .container { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; padding: 1.5rem 2rem; max-width: 1400px; margin: 0 auto; }
+    @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+
+    /* Add Video */
+    .add-section { grid-column: 1 / -1; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2rem 1.5rem; display: flex; gap: 12px; align-items: center; }
+    .add-section input {
+      flex: 1; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); font-family: inherit; font-size: 0.9rem; outline: none; transition: border 0.2s;
     }
-
-    .subtitle {
-      color: var(--text-dim);
-      font-size: 0.9rem;
-      margin-bottom: 2rem;
+    .add-section input:focus { border-color: var(--accent); }
+    .add-section input::placeholder { color: var(--dim); }
+    .btn {
+      padding: 10px 20px; border: none; border-radius: 10px; font-family: inherit; font-weight: 600;
+      font-size: 0.85rem; cursor: pointer; transition: all 0.2s; white-space: nowrap;
     }
+    .btn-primary { background: linear-gradient(135deg, #ff0000, #ff4444); color: #fff; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(255,0,0,0.3); }
+    .btn-accent { background: linear-gradient(135deg, #6c5ce7, #a29bfe); color: #fff; }
+    .btn-accent:hover { transform: translateY(-1px); box-shadow: 0 4px 15px var(--glow); }
+    .btn-sm { padding: 6px 12px; font-size: 0.75rem; border-radius: 8px; }
+    .btn-danger { background: rgba(255,82,82,0.15); color: var(--red); border: 1px solid rgba(255,82,82,0.3); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
-    .subtitle a { color: var(--accent); text-decoration: none; }
-    .subtitle a:hover { text-decoration: underline; }
-
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
+    /* Video Grid */
+    .video-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+    .video-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; transition: all 0.3s; cursor: pointer;
     }
-
-    .status-badge.online {
-      background: var(--green-glow);
-      color: var(--green);
-      border: 1px solid rgba(0,230,118,0.3);
-    }
-
-    .status-badge.offline {
-      background: var(--red-glow);
-      color: var(--red);
-      border: 1px solid rgba(255,82,82,0.3);
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-
-    .container {
-      width: 100%;
-      max-width: 900px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-    }
-
-    @media (max-width: 700px) {
-      .container { grid-template-columns: 1fr; }
-    }
-
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.5rem;
-      transition: all 0.3s ease;
-    }
-
-    .card:hover {
-      border-color: var(--accent);
-      box-shadow: 0 0 30px var(--accent-glow);
-    }
-
-    .card-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-bottom: 0.3rem;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .card-desc {
-      color: var(--text-dim);
-      font-size: 0.8rem;
-      margin-bottom: 1.2rem;
-    }
-
-    .icon { font-size: 1.3rem; }
-
-    .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: 10px;
-      padding: 2rem 1rem;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      margin-bottom: 1rem;
+    .video-card:hover { border-color: var(--accent); box-shadow: 0 0 25px var(--glow); transform: translateY(-2px); }
+    .video-thumb {
+      width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #111;
+      display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 2rem;
       position: relative;
     }
-
-    .drop-zone:hover, .drop-zone.dragover {
-      border-color: var(--accent);
-      background: rgba(108, 92, 231, 0.05);
+    .video-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .video-badge {
+      position: absolute; top: 8px; right: 8px; padding: 3px 8px; border-radius: 6px;
+      font-size: 0.65rem; font-weight: 600;
     }
+    .badge-ready { background: rgba(0,230,118,0.2); color: var(--green); }
+    .badge-processing { background: rgba(108,92,231,0.2); color: var(--accent); }
+    .badge-new { background: rgba(255,145,0,0.2); color: var(--orange); }
+    .badge-error { background: rgba(255,82,82,0.2); color: var(--red); }
+    .video-info { padding: 0.8rem 1rem; }
+    .video-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .video-meta { font-size: 0.75rem; color: var(--dim); display: flex; justify-content: space-between; align-items: center; }
+    .video-actions { display: flex; gap: 6px; margin-top: 8px; }
 
-    .drop-zone input { display: none; }
-
-    .drop-zone .label {
-      font-size: 0.85rem;
-      color: var(--text-dim);
+    /* Player Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(5px);
     }
-
-    .drop-zone .filename {
-      font-size: 0.8rem;
-      color: var(--accent);
-      margin-top: 0.5rem;
-      word-break: break-all;
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      width: 90%; max-width: 960px; overflow: hidden; animation: fadeUp 0.3s ease;
     }
-
-    .field {
-      margin-bottom: 0.8rem;
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .modal-header {
+      padding: 1rem 1.2rem; display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border);
     }
+    .modal-header h3 { font-size: 1rem; font-weight: 600; }
+    .modal-close { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 1.3rem; padding: 4px; }
+    .modal-close:hover { color: var(--text); }
+    .player-wrap { background: #000; aspect-ratio: 16/9; }
+    .player-wrap video { width: 100%; height: 100%; }
+    .modal-footer { padding: 0.8rem 1.2rem; font-size: 0.75rem; color: var(--dim); border-top: 1px solid var(--border); word-break: break-all; }
 
-    .field label {
-      display: block;
-      font-size: 0.75rem;
-      color: var(--text-dim);
-      margin-bottom: 4px;
-      font-weight: 500;
+    /* Empty State */
+    .empty-state {
+      grid-column: 1 / -1; text-align: center; padding: 4rem 2rem;
+      color: var(--dim); font-size: 0.9rem;
     }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
 
-    .field input, .field select {
-      width: 100%;
-      padding: 8px 12px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 0.85rem;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .field input:focus, .field select:focus {
-      border-color: var(--accent);
-    }
-
-    .btn {
-      width: 100%;
-      padding: 10px;
-      border: none;
-      border-radius: 10px;
-      font-family: inherit;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-
-    .btn-encode {
-      background: linear-gradient(135deg, #6c5ce7, #a29bfe);
-      color: #fff;
-    }
-
-    .btn-decode {
-      background: linear-gradient(135deg, #00b894, #00e676);
-      color: #000;
-    }
-
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px var(--accent-glow);
-    }
-
-    .btn:active { transform: translateY(0); }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none !important;
-      box-shadow: none !important;
-    }
-
-    .result {
-      margin-top: 1rem;
-      padding: 1rem;
-      border-radius: 10px;
-      font-size: 0.8rem;
-      display: none;
-      animation: fadeIn 0.3s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .result.success {
-      background: var(--green-glow);
-      border: 1px solid rgba(0,230,118,0.3);
-    }
-
-    .result.error {
-      background: var(--red-glow);
-      border: 1px solid rgba(255,82,82,0.3);
-    }
-
-    .result .dl-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 8px;
-      padding: 6px 14px;
-      background: var(--accent);
-      color: #fff;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 0.8rem;
-      transition: all 0.2s;
-    }
-
-    .result .dl-link:hover {
-      background: #7c6cf7;
-    }
-
-    .spinner {
-      width: 18px;
-      height: 18px;
-      border: 2.5px solid transparent;
-      border-top-color: currentColor;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 10px;
+      font-size: 0.85rem; font-weight: 500; z-index: 2000; animation: slideIn 0.3s ease;
       display: none;
     }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .info-bar {
-      width: 100%;
-      max-width: 900px;
-      margin-top: 2rem;
-      padding: 1rem 1.5rem;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      font-size: 0.78rem;
-      color: var(--text-dim);
-      line-height: 1.6;
-    }
-
-    .info-bar code {
-      background: var(--bg);
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: var(--accent);
-      font-size: 0.75rem;
-    }
-
-    .size-info {
-      color: var(--text-dim);
-      font-size: 0.78rem;
-      margin-top: 4px;
-    }
-
-    footer {
-      margin-top: 3rem;
-      color: var(--text-dim);
-      font-size: 0.75rem;
-    }
-
-    footer a { color: var(--accent); text-decoration: none; }
+    @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .toast.success { background: rgba(0,230,118,0.15); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
+    .toast.error { background: rgba(255,82,82,0.15); color: var(--red); border: 1px solid rgba(255,82,82,0.3); }
+    .toast.info { background: rgba(108,92,231,0.15); color: var(--accent); border: 1px solid rgba(108,92,231,0.3); }
   </style>
 </head>
 <body>
-  <h1>🎬 YT Media Storage</h1>
-  <p class="subtitle">GUI for <a href="https://github.com/PulseBeat02/yt-media-storage" target="_blank">PulseBeat02/yt-media-storage</a></p>
 
-  <div class="status-badge offline" id="statusBadge">
-    <span class="status-dot"></span>
-    <span id="statusText">Checking...</span>
+  <div class="header">
+    <div class="logo">📺 YouTube HLS Server</div>
+    <div class="status-pills">
+      <span class="pill" id="pillVideos">0 videos</span>
+      <span class="pill" id="pillCached">0 cached</span>
+      <span class="pill" id="pillCookies">cookies ?</span>
+    </div>
   </div>
 
   <div class="container">
-    <!-- ENCODE CARD -->
-    <div class="card">
-      <div class="card-title"><span class="icon">📦</span> Encode</div>
-      <div class="card-desc">Biến file bất kỳ thành video lossless (MKV)</div>
-
-      <div class="drop-zone" id="encodeDropZone" onclick="document.getElementById('encodeFile').click()">
-        <input type="file" id="encodeFile">
-        <div class="label">📁 Kéo thả file hoặc click để chọn</div>
-        <div class="filename" id="encodeFileName"></div>
-      </div>
-
-      <div class="field">
-        <label>🔐 Password (tùy chọn)</label>
-        <input type="password" id="encodePassword" placeholder="Để trống = không mã hóa">
-      </div>
-
-      <div class="field">
-        <label>Checksum</label>
-        <select id="encodeHash">
-          <option value="crc32">CRC32 (mặc định)</option>
-          <option value="xxhash">xxHash32 (nhanh hơn)</option>
-        </select>
-      </div>
-
-      <button class="btn btn-encode" id="encodeBtn" onclick="doEncode()" disabled>
-        <span class="spinner" id="encodeSpinner"></span>
-        <span id="encodeBtnText">Encode → Video</span>
-      </button>
-
-      <div class="result" id="encodeResult"></div>
+    <div class="add-section">
+      <input type="text" id="videoInput" placeholder="Paste YouTube URL hoặc Video ID (vd: dQw4w9WgXcQ)" onkeydown="if(event.key==='Enter') addVideo()">
+      <button class="btn btn-primary" onclick="addVideo()" id="addBtn">+ Thêm Video</button>
     </div>
+    <div class="video-grid" id="videoGrid"></div>
+  </div>
 
-    <!-- DECODE CARD -->
-    <div class="card">
-      <div class="card-title"><span class="icon">🔓</span> Decode</div>
-      <div class="card-desc">Khôi phục file gốc từ video MKV</div>
-
-      <div class="drop-zone" id="decodeDropZone" onclick="document.getElementById('decodeFile').click()">
-        <input type="file" id="decodeFile" accept=".mkv,.MKV">
-        <div class="label">📁 Kéo thả file MKV hoặc click để chọn</div>
-        <div class="filename" id="decodeFileName"></div>
+  <!-- Player Modal -->
+  <div class="modal-overlay" id="playerModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="playerTitle">Video Player</h3>
+        <button class="modal-close" onclick="closePlayer()">✕</button>
       </div>
-
-      <div class="field">
-        <label>🔐 Password (nếu có)</label>
-        <input type="password" id="decodePassword" placeholder="Nhập nếu file đã mã hóa">
+      <div class="player-wrap">
+        <video id="videoPlayer" controls autoplay></video>
       </div>
-
-      <div class="field">
-        <label>Tên file output</label>
-        <input type="text" id="outputName" placeholder="vd: restored.mp4" value="decoded_file">
-      </div>
-
-      <button class="btn btn-decode" id="decodeBtn" onclick="doDecode()" disabled>
-        <span class="spinner" id="decodeSpinner"></span>
-        <span id="decodeBtnText">Decode → File gốc</span>
-      </button>
-
-      <div class="result" id="decodeResult"></div>
+      <div class="modal-footer" id="playerUrl"></div>
     </div>
   </div>
 
-  <div class="info-bar">
-    <strong>💡 Cách hoạt động:</strong><br>
-    <code>Encode</code> — File gốc → chia chunk → Fountain Codes → nhúng vào video frames (FFV1/4K) → file MKV<br>
-    <code>Decode</code> — MKV → extract frames → khôi phục data → file gốc y hệt (lossless)<br>
-    <br>
-    <strong>⚡ Upload lên YouTube:</strong> Video MKV → convert sang MP4 → upload YouTube (unlisted) → tải về bằng <code>yt-dlp</code> → decode lại = file gốc!
-  </div>
-
-  <footer>
-    Powered by <a href="https://github.com/PulseBeat02/yt-media-storage" target="_blank">yt-media-storage</a>
-    &nbsp;·&nbsp; Fountain Codes + FFV1 + XChaCha20
-  </footer>
+  <div class="toast" id="toast"></div>
 
   <script>
-    function formatSize(bytes) {
-      if (bytes < 1024) return bytes + ' B';
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    let hlsInstance = null;
+
+    // ====== TOAST ======
+    function toast(msg, type = 'info') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `toast ${type}`;
+      t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 3000);
     }
 
-    // Status check
-    fetch('/api/status')
-      .then(r => r.json())
-      .then(d => {
-        const badge = document.getElementById('statusBadge');
-        const text = document.getElementById('statusText');
-        if (d.binary_exists) {
-          badge.className = 'status-badge online';
-          text.textContent = 'Binary OK';
-        } else {
-          badge.className = 'status-badge offline';
-          text.textContent = 'Binary not found!';
-        }
-      })
-      .catch(() => {
-        document.getElementById('statusText').textContent = 'API Error';
-      });
-
-    // File selection
-    function setupDropZone(zoneId, inputId, nameId, btnId) {
-      const zone = document.getElementById(zoneId);
-      const input = document.getElementById(inputId);
-      const nameEl = document.getElementById(nameId);
-      const btn = document.getElementById(btnId);
-
-      input.addEventListener('change', () => {
-        if (input.files.length) {
-          const f = input.files[0];
-          nameEl.textContent = `${f.name} (${formatSize(f.size)})`;
-          btn.disabled = false;
-        }
-      });
-
-      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-      zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-      zone.addEventListener('drop', e => {
-        e.preventDefault();
-        zone.classList.remove('dragover');
-        if (e.dataTransfer.files.length) {
-          input.files = e.dataTransfer.files;
-          const f = input.files[0];
-          nameEl.textContent = `${f.name} (${formatSize(f.size)})`;
-          btn.disabled = false;
-        }
-      });
-    }
-
-    setupDropZone('encodeDropZone', 'encodeFile', 'encodeFileName', 'encodeBtn');
-    setupDropZone('decodeDropZone', 'decodeFile', 'decodeFileName', 'decodeBtn');
-
-    // Encode
-    async function doEncode() {
-      const file = document.getElementById('encodeFile').files[0];
-      if (!file) return;
-
-      const btn = document.getElementById('encodeBtn');
-      const spinner = document.getElementById('encodeSpinner');
-      const btnText = document.getElementById('encodeBtnText');
-      const result = document.getElementById('encodeResult');
-
-      btn.disabled = true;
-      spinner.style.display = 'inline-block';
-      btnText.textContent = 'Đang encode...';
-      result.style.display = 'none';
-
-      const form = new FormData();
-      form.append('file', file);
-      form.append('password', document.getElementById('encodePassword').value);
-      form.append('hash', document.getElementById('encodeHash').value);
-
+    // ====== LOAD STATUS ======
+    async function loadStatus() {
       try {
-        const resp = await fetch('/api/encode', { method: 'POST', body: form });
-        const data = await resp.json();
+        const r = await fetch('/api/status');
+        const d = await r.json();
+        document.getElementById('pillVideos').textContent = `${d.total_videos} videos`;
+        document.getElementById('pillVideos').className = `pill ${d.total_videos > 0 ? 'ok' : 'warn'}`;
+        document.getElementById('pillCached').textContent = `${d.cached_videos} cached`;
+        document.getElementById('pillCached').className = `pill ${d.cached_videos > 0 ? 'ok' : 'warn'}`;
+        document.getElementById('pillCookies').textContent = d.cookies_exist ? 'cookies ✅' : 'no cookies';
+        document.getElementById('pillCookies').className = `pill ${d.cookies_exist ? 'ok' : 'warn'}`;
+      } catch(e) {}
+    }
 
-        if (data.success) {
-          result.className = 'result success';
-          result.innerHTML = `
-            ✅ <strong>Encode thành công!</strong><br>
-            <div class="size-info">
-              📥 Input: ${formatSize(data.input_size)}<br>
-              📤 Output: ${formatSize(data.output_size)}
+    // ====== LOAD VIDEOS ======
+    async function loadVideos() {
+      try {
+        const r = await fetch('/api/videos');
+        const d = await r.json();
+        const grid = document.getElementById('videoGrid');
+
+        if (d.videos.length === 0) {
+          grid.innerHTML = `<div class="empty-state"><div class="icon">📺</div>Chưa có video nào.<br>Paste YouTube URL ở trên để bắt đầu!</div>`;
+          return;
+        }
+
+        grid.innerHTML = d.videos.map(v => {
+          const statusClass = v.cached ? 'badge-ready' : v.status?.includes('error') ? 'badge-error' : v.status === 'added' ? 'badge-new' : 'badge-processing';
+          const statusText = v.cached ? '✅ Ready' : v.status?.includes('error') ? '❌ Error' : v.status === 'added' ? '🆕 New' : '⏳ ' + v.status;
+
+          return `
+            <div class="video-card" ondblclick="playVideo('${v.id}')">
+              <div class="video-thumb">
+                ${v.thumbnail ? `<img src="${v.thumbnail}" alt="" onerror="this.style.display='none'">` : '🎬'}
+                <span class="video-badge ${statusClass}">${statusText}</span>
+              </div>
+              <div class="video-info">
+                <div class="video-title">${escapeHtml(v.title || v.id)}</div>
+                <div class="video-meta">
+                  <span>${v.id}</span>
+                  <span>${v.duration || '?'}s</span>
+                </div>
+                <div class="video-actions">
+                  ${v.cached
+                    ? `<button class="btn btn-accent btn-sm" onclick="event.stopPropagation(); playVideo('${v.id}')">▶ Play</button>
+                       <button class="btn btn-sm" style="background:var(--bg);color:var(--dim);border:1px solid var(--border)" onclick="event.stopPropagation(); copyUrl('${v.id}')">📋 Copy URL</button>`
+                    : `<button class="btn btn-accent btn-sm" onclick="event.stopPropagation(); prepareVideo('${v.id}', this)">⚡ Prepare HLS</button>`
+                  }
+                  <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteVideo('${v.id}')">🗑</button>
+                </div>
+              </div>
             </div>
-            <a class="dl-link" href="${data.download_url}" download>⬇ Tải video MKV</a>
           `;
-        } else {
-          result.className = 'result error';
-          result.innerHTML = `❌ <strong>Lỗi:</strong> ${data.error}<br><small>${data.stderr || ''}</small>`;
-        }
-      } catch (err) {
-        result.className = 'result error';
-        result.innerHTML = `❌ <strong>Lỗi kết nối:</strong> ${err.message}`;
+        }).join('');
+      } catch(e) {
+        toast('Failed to load videos', 'error');
       }
-
-      result.style.display = 'block';
-      spinner.style.display = 'none';
-      btnText.textContent = 'Encode → Video';
-      btn.disabled = false;
     }
 
-    // Decode
-    async function doDecode() {
-      const file = document.getElementById('decodeFile').files[0];
-      if (!file) return;
+    // ====== ADD VIDEO ======
+    async function addVideo() {
+      const input = document.getElementById('videoInput');
+      const val = input.value.trim();
+      if (!val) return;
 
-      const btn = document.getElementById('decodeBtn');
-      const spinner = document.getElementById('decodeSpinner');
-      const btnText = document.getElementById('decodeBtnText');
-      const result = document.getElementById('decodeResult');
-
+      const btn = document.getElementById('addBtn');
       btn.disabled = true;
-      spinner.style.display = 'inline-block';
-      btnText.textContent = 'Đang decode...';
-      result.style.display = 'none';
-
-      const form = new FormData();
-      form.append('file', file);
-      form.append('password', document.getElementById('decodePassword').value);
-      form.append('output_name', document.getElementById('outputName').value || 'decoded_file');
+      btn.textContent = 'Adding...';
 
       try {
-        const resp = await fetch('/api/decode', { method: 'POST', body: form });
-        const data = await resp.json();
+        const r = await fetch('/api/videos', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({video_id: val})
+        });
+        const d = await r.json();
 
-        if (data.success) {
-          result.className = 'result success';
-          result.innerHTML = `
-            ✅ <strong>Decode thành công!</strong><br>
-            <div class="size-info">📦 Output: ${formatSize(data.output_size)}</div>
-            <a class="dl-link" href="${data.download_url}" download>⬇ Tải file gốc</a>
-          `;
+        if (d.success) {
+          toast(`✅ Added: ${d.title}`, 'success');
+          input.value = '';
+          loadVideos();
+          loadStatus();
         } else {
-          result.className = 'result error';
-          result.innerHTML = `❌ <strong>Lỗi:</strong> ${data.error}<br><small>${data.stderr || ''}</small>`;
+          toast(`❌ ${d.error}`, 'error');
         }
-      } catch (err) {
-        result.className = 'result error';
-        result.innerHTML = `❌ <strong>Lỗi kết nối:</strong> ${err.message}`;
+      } catch(e) {
+        toast('Connection error', 'error');
       }
 
-      result.style.display = 'block';
-      spinner.style.display = 'none';
-      btnText.textContent = 'Decode → File gốc';
       btn.disabled = false;
+      btn.textContent = '+ Thêm Video';
     }
+
+    // ====== PREPARE VIDEO ======
+    async function prepareVideo(id, btn) {
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Processing...'; }
+      toast('🔄 Extracting & transcoding... (có thể mất vài phút)', 'info');
+
+      try {
+        const r = await fetch(`/api/prepare/${id}`, {method: 'POST'});
+        const d = await r.json();
+
+        if (d.success || d.cached) {
+          toast('✅ HLS ready!', 'success');
+          loadVideos();
+          loadStatus();
+        } else if (d.status === 'processing') {
+          toast('⏳ Đang xử lý...', 'info');
+        } else {
+          toast(`❌ ${d.error}`, 'error');
+        }
+      } catch(e) {
+        toast('Connection error', 'error');
+      }
+
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ Prepare HLS'; }
+    }
+
+    // ====== PLAY VIDEO ======
+    function playVideo(id) {
+      const url = `/hls/${id}/index.m3u8`;
+      const video = document.getElementById('videoPlayer');
+
+      document.getElementById('playerTitle').textContent = id;
+      document.getElementById('playerUrl').innerHTML = `<strong>HLS URL:</strong> ${location.origin}${url}`;
+      document.getElementById('playerModal').classList.add('active');
+
+      if (hlsInstance) { hlsInstance.destroy(); }
+
+      if (Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(video);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.play();
+      }
+    }
+
+    function closePlayer() {
+      document.getElementById('playerModal').classList.remove('active');
+      const video = document.getElementById('videoPlayer');
+      video.pause(); video.src = '';
+      if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+    }
+
+    // ====== COPY URL ======
+    function copyUrl(id) {
+      const url = `${location.origin}/hls/${id}/index.m3u8`;
+      navigator.clipboard.writeText(url).then(() => toast('📋 Copied HLS URL!', 'success'));
+    }
+
+    // ====== DELETE ======
+    async function deleteVideo(id) {
+      if (!confirm(`Xóa video ${id}?`)) return;
+      try {
+        await fetch(`/api/videos/${id}`, {method: 'DELETE'});
+        toast('🗑 Deleted', 'info');
+        loadVideos();
+        loadStatus();
+      } catch(e) { toast('Error', 'error'); }
+    }
+
+    // ====== UTILS ======
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // Close modal on backdrop click
+    document.getElementById('playerModal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closePlayer();
+    });
+
+    // Init
+    loadStatus();
+    loadVideos();
+    setInterval(loadStatus, 10000);
   </script>
 </body>
 </html>

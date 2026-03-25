@@ -1,166 +1,263 @@
 #!/usr/bin/env python3
-"""Web GUI for yt-media-storage - Encode/Decode files as YouTube videos."""
+"""YouTube HLS Streaming Server — Use YouTube as free video CDN."""
 
 import os
+import json
 import subprocess
-import uuid
-import shutil
-import mimetypes
+import hashlib
+import time
+import threading
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory, Response
 
 app = Flask(__name__, static_folder="static")
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB upload limit
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
-# Config
-UPLOAD_DIR = Path("/tmp/yt-storage-uploads")
-OUTPUT_DIR = Path("/tmp/yt-storage-outputs")
-MEDIA_STORAGE_BIN = os.environ.get(
-    "MEDIA_STORAGE_BIN",
-    os.path.expanduser("~/yt-media-storage/build/media_storage")
-)
+# ============ CONFIG ============
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/opt/yt-hls"))
+HLS_DIR = DATA_DIR / "hls"
+DB_FILE = DATA_DIR / "videos.json"
+COOKIES_FILE = Path(os.environ.get("COOKIES_FILE", "/root/cookies.txt"))
+PORT = int(os.environ.get("PORT", "5555"))
 
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+HLS_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Transcoding lock per video
+_locks = {}
+_lock_master = threading.Lock()
 
 
+# ============ DATABASE (JSON file) ============
+def load_db():
+    if DB_FILE.exists():
+        return json.loads(DB_FILE.read_text())
+    return {"videos": {}}
+
+
+def save_db(db):
+    DB_FILE.write_text(json.dumps(db, indent=2, ensure_ascii=False))
+
+
+# ============ HELPERS ============
+def get_lock(video_id):
+    with _lock_master:
+        if video_id not in _locks:
+            _locks[video_id] = threading.Lock()
+        return _locks[video_id]
+
+
+def extract_youtube_url(video_id):
+    """Use yt-dlp to get direct video URL from YouTube."""
+    cmd = ["yt-dlp", "-g", "-f", "best[ext=mp4]/best"]
+    if COOKIES_FILE.exists():
+        cmd.extend(["--cookies", str(COOKIES_FILE)])
+    cmd.append(f"https://www.youtube.com/watch?v={video_id}")
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            url = result.stdout.strip().split('\n')[0]
+            return url, None
+        return None, result.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return None, "yt-dlp timeout"
+
+
+def transcode_to_hls(video_id, source_url):
+    """Transcode YouTube video to HLS segments using FFmpeg."""
+    out_dir = HLS_DIR / video_id
+    playlist = out_dir / "index.m3u8"
+
+    # Already cached?
+    if playlist.exists():
+        return True, None
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", source_url,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-hls_time", "6",
+        "-hls_list_size", "0",
+        "-hls_segment_filename", str(out_dir / "seg_%03d.ts"),
+        "-f", "hls",
+        str(playlist)
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if result.returncode == 0 and playlist.exists():
+            return True, None
+        return False, result.stderr[-500:] if result.stderr else "Unknown error"
+    except subprocess.TimeoutExpired:
+        return False, "FFmpeg timeout (>10 min)"
+
+
+def get_video_info(video_id):
+    """Get video title and metadata from yt-dlp."""
+    cmd = ["yt-dlp", "--print", "title", "--print", "duration", "--print", "thumbnail", "--no-download"]
+    if COOKIES_FILE.exists():
+        cmd.extend(["--cookies", str(COOKIES_FILE)])
+    cmd.append(f"https://www.youtube.com/watch?v={video_id}")
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            return {
+                "title": lines[0] if len(lines) > 0 else video_id,
+                "duration": lines[1] if len(lines) > 1 else "?",
+                "thumbnail": lines[2] if len(lines) > 2 else "",
+            }
+    except Exception:
+        pass
+    return {"title": video_id, "duration": "?", "thumbnail": ""}
+
+
+# ============ ROUTES ============
 @app.route("/")
 def index():
     return send_from_directory("static", "index.html")
 
 
-@app.route("/api/encode", methods=["POST"])
-def encode_file():
-    """Encode a file into a lossless MKV video."""
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+@app.route("/api/videos", methods=["GET"])
+def list_videos():
+    db = load_db()
+    videos = []
+    for vid, info in db["videos"].items():
+        cached = (HLS_DIR / vid / "index.m3u8").exists()
+        videos.append({**info, "id": vid, "cached": cached})
+    return jsonify({"videos": videos})
 
-    file = request.files["file"]
-    if not file.filename:
-        return jsonify({"error": "Empty filename"}), 400
 
-    password = request.form.get("password", "").strip()
-    hash_algo = request.form.get("hash", "crc32")
+@app.route("/api/videos", methods=["POST"])
+def add_video():
+    data = request.json or {}
+    video_id = data.get("video_id", "").strip()
 
-    job_id = str(uuid.uuid4())[:8]
-    input_path = UPLOAD_DIR / f"{job_id}_{file.filename}"
-    output_path = OUTPUT_DIR / f"{job_id}_encoded.mkv"
+    # Extract video ID from various URL formats
+    if "youtube.com" in video_id or "youtu.be" in video_id:
+        import re
+        match = re.search(r'(?:v=|\/live\/|youtu\.be\/)([a-zA-Z0-9_-]{11})', video_id)
+        if match:
+            video_id = match.group(1)
 
-    file.save(str(input_path))
-    input_size = input_path.stat().st_size
+    if not video_id or len(video_id) != 11:
+        return jsonify({"error": "Invalid YouTube video ID"}), 400
 
-    # Build command
-    cmd = [MEDIA_STORAGE_BIN, "encode", "-i", str(input_path), "-o", str(output_path)]
-    if hash_algo == "xxhash":
-        cmd.extend(["--hash", "xxhash"])
-    if password:
-        cmd.extend(["--encrypt", "--password", password])
+    db = load_db()
+    if video_id in db["videos"]:
+        return jsonify({"error": "Video already exists", "id": video_id}), 409
+
+    # Get info
+    info = get_video_info(video_id)
+    info["added_at"] = int(time.time())
+    info["status"] = "added"
+
+    db["videos"][video_id] = info
+    save_db(db)
+
+    return jsonify({"success": True, "id": video_id, **info})
+
+
+@app.route("/api/videos/<video_id>", methods=["DELETE"])
+def delete_video(video_id):
+    db = load_db()
+    if video_id not in db["videos"]:
+        return jsonify({"error": "Not found"}), 404
+
+    del db["videos"][video_id]
+    save_db(db)
+
+    # Clean cache
+    import shutil
+    cache_dir = HLS_DIR / video_id
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir)
+
+    return jsonify({"success": True})
+
+
+@app.route("/api/prepare/<video_id>", methods=["POST"])
+def prepare_video(video_id):
+    """Extract YouTube URL and transcode to HLS (can take a while)."""
+    db = load_db()
+    if video_id not in db["videos"]:
+        return jsonify({"error": "Video not in database"}), 404
+
+    # Check cache
+    playlist = HLS_DIR / video_id / "index.m3u8"
+    if playlist.exists():
+        return jsonify({"success": True, "cached": True, "stream_url": f"/hls/{video_id}/index.m3u8"})
+
+    lock = get_lock(video_id)
+    if not lock.acquire(blocking=False):
+        return jsonify({"status": "processing", "message": "Already transcoding..."}), 202
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            return jsonify({
-                "error": "Encode failed",
-                "stderr": result.stderr,
-                "stdout": result.stdout
-            }), 500
+        # Update status
+        db["videos"][video_id]["status"] = "extracting"
+        save_db(db)
 
-        output_size = output_path.stat().st_size
+        # Extract URL
+        url, err = extract_youtube_url(video_id)
+        if not url:
+            db["videos"][video_id]["status"] = f"error: {err}"
+            save_db(db)
+            return jsonify({"error": f"yt-dlp failed: {err}"}), 500
+
+        # Transcode
+        db["videos"][video_id]["status"] = "transcoding"
+        save_db(db)
+
+        ok, err = transcode_to_hls(video_id, url)
+        if not ok:
+            db["videos"][video_id]["status"] = f"error: {err}"
+            save_db(db)
+            return jsonify({"error": f"FFmpeg failed: {err}"}), 500
+
+        db["videos"][video_id]["status"] = "ready"
+        save_db(db)
 
         return jsonify({
             "success": True,
-            "job_id": job_id,
-            "original_name": file.filename,
-            "input_size": input_size,
-            "output_size": output_size,
-            "download_url": f"/api/download/{job_id}_encoded.mkv",
-            "stdout": result.stdout
+            "stream_url": f"/hls/{video_id}/index.m3u8"
         })
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "Encode timed out (>5 min)"}), 504
     finally:
-        input_path.unlink(missing_ok=True)
+        lock.release()
 
 
-@app.route("/api/decode", methods=["POST"])
-def decode_file():
-    """Decode a MKV video back to the original file."""
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+@app.route("/hls/<video_id>/<path:filename>")
+def serve_hls(video_id, filename):
+    """Serve HLS playlist and segments."""
+    hls_path = HLS_DIR / video_id
+    if not (hls_path / filename).exists():
+        return jsonify({"error": "Not found"}), 404
 
-    file = request.files["file"]
-    if not file.filename:
-        return jsonify({"error": "Empty filename"}), 400
-
-    password = request.form.get("password", "").strip()
-    output_name = request.form.get("output_name", "decoded_file").strip()
-
-    job_id = str(uuid.uuid4())[:8]
-    input_path = UPLOAD_DIR / f"{job_id}_{file.filename}"
-    output_path = OUTPUT_DIR / f"{job_id}_{output_name}"
-
-    file.save(str(input_path))
-
-    cmd = [MEDIA_STORAGE_BIN, "decode", "-i", str(input_path), "-o", str(output_path)]
-    if password:
-        cmd.extend(["--password", password])
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            return jsonify({
-                "error": "Decode failed",
-                "stderr": result.stderr,
-                "stdout": result.stdout
-            }), 500
-
-        output_size = output_path.stat().st_size
-
-        return jsonify({
-            "success": True,
-            "job_id": job_id,
-            "output_size": output_size,
-            "download_url": f"/api/download/{job_id}_{output_name}",
-            "stdout": result.stdout
-        })
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "Decode timed out (>5 min)"}), 504
-    finally:
-        input_path.unlink(missing_ok=True)
-
-
-@app.route("/api/download/<path:filename>")
-def download_file(filename):
-    """Download a processed file."""
-    filepath = OUTPUT_DIR / filename
-    if not filepath.exists():
-        return jsonify({"error": "File not found", "path": str(filepath)}), 404
-    return send_from_directory(str(OUTPUT_DIR), filename, as_attachment=True)
-
-
-@app.route("/api/files")
-def list_files():
-    """List all files in output directory (debug)."""
-    files = []
-    for f in OUTPUT_DIR.iterdir():
-        files.append({"name": f.name, "size": f.stat().st_size})
-    return jsonify({"files": files})
+    mimetype = "application/vnd.apple.mpegurl" if filename.endswith(".m3u8") else "video/mp2t"
+    response = send_from_directory(str(hls_path), filename)
+    response.headers["Content-Type"] = mimetype
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
 
 
 @app.route("/api/status")
 def status():
-    """Check if media_storage binary exists."""
-    binary_exists = os.path.isfile(MEDIA_STORAGE_BIN) and os.access(MEDIA_STORAGE_BIN, os.X_OK)
+    db = load_db()
     return jsonify({
-        "binary_path": MEDIA_STORAGE_BIN,
-        "binary_exists": binary_exists,
-        "upload_dir": str(UPLOAD_DIR),
-        "output_dir": str(OUTPUT_DIR),
+        "total_videos": len(db["videos"]),
+        "cached_videos": sum(1 for v in db["videos"] if (HLS_DIR / v / "index.m3u8").exists()),
+        "hls_dir": str(HLS_DIR),
+        "cookies_exist": COOKIES_FILE.exists(),
     })
 
 
 if __name__ == "__main__":
-    print(f"🎬 YT Media Storage Web GUI")
-    print(f"📂 Binary: {MEDIA_STORAGE_BIN}")
-    print(f"🌐 Open http://localhost:5555")
-    app.run(host="0.0.0.0", port=5555, debug=True)
+    print("📺 YouTube HLS Streaming Server")
+    print(f"📂 HLS Cache: {HLS_DIR}")
+    print(f"🍪 Cookies: {COOKIES_FILE} ({'✅' if COOKIES_FILE.exists() else '❌'})")
+    print(f"🌐 http://localhost:{PORT}")
+    app.run(host="0.0.0.0", port=PORT, debug=True, threaded=True)
