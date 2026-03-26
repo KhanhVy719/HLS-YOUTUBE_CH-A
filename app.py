@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""YouTube HLS Streaming Server — Proxy YouTube CDN as HLS streams."""
+"""YouTube HLS Streaming Server — Proxy YouTube CDN + Upload with AES-128 encryption."""
 
 import os
 import json
@@ -8,19 +8,24 @@ import subprocess
 import time
 import threading
 import urllib.request
+import hashlib
+import secrets
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory, Response, redirect
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder="static")
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max upload
 
 # ============ CONFIG ============
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/opt/yt-hls"))
 HLS_DIR = DATA_DIR / "hls"
+UPLOAD_DIR = DATA_DIR / "uploads"
 DB_FILE = DATA_DIR / "videos.json"
 COOKIES_FILE = Path(os.environ.get("COOKIES_FILE", "/root/cookies.txt"))
 PORT = int(os.environ.get("PORT", "5555"))
 DENO_DIR = os.path.expanduser("~/.deno/bin")
+ALLOWED_EXT = {"mp4", "mkv", "avi", "mov", "webm", "flv", "ts", "m4v"}
 
 # Subprocess env with deno in PATH
 SUB_ENV = os.environ.copy()
@@ -28,6 +33,7 @@ SUB_ENV["PATH"] = DENO_DIR + ":" + SUB_ENV.get("PATH", "")
 
 HLS_DIR.mkdir(parents=True, exist_ok=True)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # URL cache: {video_id: {"url": ..., "expires": timestamp}}
 _url_cache = {}
@@ -330,22 +336,185 @@ def serve_hls(video_id, filename):
 @app.route("/api/status")
 def status():
     db = load_db()
+    uploads = db.get("uploads", {})
     return jsonify({
         "total_videos": len(db["videos"]),
         "cached_videos": sum(1 for v in db["videos"] if (HLS_DIR / v / "index.m3u8").exists()),
+        "total_uploads": len(uploads),
         "hls_dir": str(HLS_DIR),
         "cookies_exist": COOKIES_FILE.exists(),
     })
+
+
+# ====== UPLOAD + ENCRYPT ======
+def derive_key(passphrase):
+    """Derive a 16-byte AES key from passphrase."""
+    return hashlib.sha256(passphrase.encode()).digest()[:16]
+
+
+def gen_key_iv():
+    """Generate random 16-byte key and IV."""
+    return secrets.token_bytes(16), secrets.token_bytes(16)
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload_video():
+    """Upload video file → encrypt → transcode to AES-128 HLS."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    f = request.files["file"]
+    passkey = request.form.get("key", "").strip()
+    title = request.form.get("title", "").strip()
+
+    if not f.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    if ext not in ALLOWED_EXT:
+        return jsonify({"error": f"File type .{ext} not allowed"}), 400
+
+    if not passkey:
+        return jsonify({"error": "Encryption key is required"}), 400
+
+    # Generate unique ID
+    uid = f"up_{secrets.token_hex(6)}"
+    safe_name = secure_filename(f.filename)
+    upload_path = UPLOAD_DIR / f"{uid}_{safe_name}"
+
+    # Save uploaded file
+    f.save(str(upload_path))
+    file_size = upload_path.stat().st_size
+
+    # Derive AES key from passphrase
+    aes_key = derive_key(passkey)
+    aes_iv = secrets.token_bytes(16)
+
+    # Save key info file
+    out_dir = HLS_DIR / uid
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    key_file = out_dir / "enc.key"
+    key_file.write_bytes(aes_key)
+
+    iv_hex = aes_iv.hex()
+
+    # Create key info file for FFmpeg
+    # Format: key_uri\nkey_file_path\niv
+    key_info_file = out_dir / "key_info.txt"
+    key_info_file.write_text(f"/api/key/{uid}?key={{key}}\n{key_file}\n{iv_hex}\n")
+
+    # FFmpeg: transcode to AES-128 encrypted HLS
+    playlist = out_dir / "index.m3u8"
+    cmd = [
+        "ffmpeg", "-y", "-i", str(upload_path),
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-hls_time", "6", "-hls_list_size", "0",
+        "-hls_key_info_file", str(key_info_file),
+        "-hls_segment_filename", str(out_dir / "seg_%03d.ts"),
+        "-f", "hls", str(playlist)
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, env=SUB_ENV)
+        if result.returncode != 0 or not playlist.exists():
+            upload_path.unlink(missing_ok=True)
+            return jsonify({"error": f"FFmpeg failed: {result.stderr[-300:]}"}), 500
+    except subprocess.TimeoutExpired:
+        upload_path.unlink(missing_ok=True)
+        return jsonify({"error": "Encoding timeout (>30min)"}), 504
+
+    # Fix m3u8: replace key URI placeholder with actual endpoint
+    m3u8_content = playlist.read_text()
+    m3u8_content = m3u8_content.replace("/api/key/{uid}?key={key}", f"/api/key/{uid}")
+    playlist.write_text(m3u8_content)
+
+    # Clean up source file
+    upload_path.unlink(missing_ok=True)
+
+    # Save to DB
+    db = load_db()
+    if "uploads" not in db:
+        db["uploads"] = {}
+    db["uploads"][uid] = {
+        "title": title or safe_name,
+        "filename": safe_name,
+        "size": file_size,
+        "encrypted": True,
+        "key_hash": hashlib.sha256(passkey.encode()).hexdigest()[:16],
+        "added_at": int(time.time()),
+        "status": "ready",
+    }
+    save_db(db)
+
+    return jsonify({
+        "success": True,
+        "id": uid,
+        "stream_url": f"/hls/{uid}/index.m3u8",
+        "message": "Video encrypted and ready for HLS streaming"
+    })
+
+
+@app.route("/api/key/<uid>")
+def serve_key(uid):
+    """Serve AES-128 decryption key (requires passphrase via query param or header)."""
+    key_file = HLS_DIR / uid / "enc.key"
+    if not key_file.exists():
+        return jsonify({"error": "Key not found"}), 404
+
+    # Optional: validate passphrase
+    passkey = request.args.get("key", "") or request.headers.get("X-Key", "")
+    db = load_db()
+    upload_info = db.get("uploads", {}).get(uid)
+
+    if upload_info and passkey:
+        expected_hash = upload_info.get("key_hash", "")
+        provided_hash = hashlib.sha256(passkey.encode()).hexdigest()[:16]
+        if provided_hash != expected_hash:
+            return Response("Invalid key", status=403)
+
+    # Return the raw key bytes
+    key_data = key_file.read_bytes()
+    resp = Response(key_data, content_type="application/octet-stream")
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
+@app.route("/api/uploads", methods=["GET"])
+def list_uploads():
+    """List all uploaded + encrypted videos."""
+    db = load_db()
+    uploads = []
+    for uid, info in db.get("uploads", {}).items():
+        has_hls = (HLS_DIR / uid / "index.m3u8").exists()
+        uploads.append({**info, "id": uid, "has_hls": has_hls})
+    return jsonify({"uploads": uploads})
+
+
+@app.route("/api/uploads/<uid>", methods=["DELETE"])
+def delete_upload(uid):
+    db = load_db()
+    if uid not in db.get("uploads", {}):
+        return jsonify({"error": "Not found"}), 404
+    del db["uploads"][uid]
+    save_db(db)
+    import shutil
+    shutil.rmtree(HLS_DIR / uid, ignore_errors=True)
+    return jsonify({"success": True})
 
 
 if __name__ == "__main__":
     update_ytdlp()
     print("📺 YouTube HLS Streaming Server")
     print(f"📂 HLS Cache: {HLS_DIR}")
+    print(f"📤 Uploads: {UPLOAD_DIR}")
     print(f"🍪 Cookies: {COOKIES_FILE} ({'✅' if COOKIES_FILE.exists() else '❌'})")
     print(f"🌐 http://localhost:{PORT}")
     print(f"\n📡 Endpoints:")
-    print(f"   /proxy/VIDEO_ID     → Direct proxy stream (no download)")
+    print(f"   /proxy/VIDEO_ID     → Direct proxy stream")
     print(f"   /api/cdn/VIDEO_ID   → Get YouTube CDN URL")
     print(f"   /hls/VIDEO_ID/      → HLS m3u8 (after prepare)")
+    print(f"   /api/upload         → Upload + encrypt video")
+    print(f"   /api/key/UID        → AES-128 key endpoint")
     app.run(host="0.0.0.0", port=PORT, debug=True, threaded=True)

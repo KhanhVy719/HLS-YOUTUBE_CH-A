@@ -13,32 +13,55 @@
       --border: #1e1e30; --text: #e4e4ef; --dim: #8888a4;
       --accent: #6c5ce7; --glow: rgba(108,92,231,0.25);
       --green: #00e676; --red: #ff5252; --orange: #ff9100;
-      --yt-red: #ff0000; --radius: 14px;
+      --yt-red: #ff0000; --radius: 14px; --cyan: #00bcd4;
     }
     body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
     .header { padding: 1.2rem 2rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
-    .logo { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, var(--yt-red), #ff6b6b, var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .pills { display: flex; gap: 8px; }
+    .logo { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, var(--yt-red), #ff6b6b, var(--accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; }
     .pill { padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; border: 1px solid var(--border); }
     .pill.ok { color: var(--green); border-color: rgba(0,230,118,0.3); background: rgba(0,230,118,0.08); }
     .pill.warn { color: var(--orange); border-color: rgba(255,145,0,0.3); background: rgba(255,145,0,0.08); }
 
     .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; }
 
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 1.2rem; }
+    .tab { padding: 8px 18px; border-radius: 10px 10px 0 0; font-size: 0.82rem; font-weight: 600; cursor: pointer; background: var(--bg-card); border: 1px solid var(--border); border-bottom: none; color: var(--dim); transition: all 0.2s; }
+    .tab.active { background: var(--bg); color: var(--accent); border-color: var(--accent); }
+    .tab:hover { color: var(--text); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
     /* Add Video */
-    .add-bar { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; display: flex; gap: 10px; margin-bottom: 1.5rem; }
-    .add-bar input { flex: 1; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 0.9rem; outline: none; transition: border 0.2s; }
+    .add-bar { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; display: flex; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .add-bar input { flex: 1; min-width: 200px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: inherit; font-size: 0.9rem; outline: none; transition: border 0.2s; }
     .add-bar input:focus { border-color: var(--accent); }
     .add-bar input::placeholder { color: var(--dim); }
+
+    /* Upload area */
+    .upload-box { background: var(--bg-card); border: 2px dashed var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; text-align: center; transition: all 0.3s; cursor: pointer; }
+    .upload-box:hover, .upload-box.drag { border-color: var(--cyan); background: rgba(0,188,212,0.05); }
+    .upload-box .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    .upload-box p { color: var(--dim); font-size: 0.85rem; }
+    .upload-form { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; margin-bottom: 1.5rem; }
+    .form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+    .form-row label { font-size: 0.78rem; font-weight: 600; color: var(--dim); min-width: 60px; }
+    .form-row input { flex: 1; min-width: 150px; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: inherit; font-size: 0.85rem; outline: none; }
+    .form-row input:focus { border-color: var(--cyan); }
+    .form-row input[type=file] { padding: 6px; }
+    .key-input { font-family: 'Courier New', monospace !important; letter-spacing: 1px; }
+    .progress-bar { width: 100%; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--cyan), var(--accent)); border-radius: 3px; transition: width 0.3s; width: 0%; }
 
     .btn { padding: 8px 16px; border: none; border-radius: 10px; font-family: inherit; font-weight: 600; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
     .btn:hover { transform: translateY(-1px); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
     .btn-yt { background: linear-gradient(135deg, var(--yt-red), #cc0000); color: #fff; }
-    .btn-yt:hover { box-shadow: 0 4px 15px rgba(255,0,0,0.3); }
     .btn-accent { background: linear-gradient(135deg, var(--accent), #a29bfe); color: #fff; }
-    .btn-accent:hover { box-shadow: 0 4px 15px var(--glow); }
+    .btn-cyan { background: linear-gradient(135deg, var(--cyan), #26c6da); color: #fff; }
+    .btn-cyan:hover { box-shadow: 0 4px 15px rgba(0,188,212,0.3); }
     .btn-ghost { background: var(--bg); color: var(--dim); border: 1px solid var(--border); }
     .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
     .btn-danger { background: rgba(255,82,82,0.1); color: var(--red); border: 1px solid rgba(255,82,82,0.2); }
@@ -48,13 +71,17 @@
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
     .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: all 0.3s; }
     .card:hover { border-color: var(--accent); box-shadow: 0 0 20px var(--glow); transform: translateY(-2px); }
-    .thumb { width: 100%; aspect-ratio: 16/9; background: #111; position: relative; overflow: hidden; cursor: pointer; }
+    .card.enc { border-color: rgba(0,188,212,0.2); }
+    .card.enc:hover { border-color: var(--cyan); box-shadow: 0 0 20px rgba(0,188,212,0.2); }
+    .thumb { width: 100%; aspect-ratio: 16/9; background: #111; position: relative; overflow: hidden; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .thumb img { width: 100%; height: 100%; object-fit: cover; }
     .thumb .play-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); opacity: 0; transition: opacity 0.2s; }
     .thumb:hover .play-overlay { opacity: 1; }
     .play-icon { width: 50px; height: 50px; background: rgba(255,0,0,0.9); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+    .play-icon.enc-icon { background: rgba(0,188,212,0.9); }
     .badge { position: absolute; top: 6px; right: 6px; padding: 2px 8px; border-radius: 6px; font-size: 0.6rem; font-weight: 700; }
     .badge-ready { background: rgba(0,230,118,0.2); color: var(--green); }
+    .badge-enc { background: rgba(0,188,212,0.2); color: var(--cyan); }
     .badge-cdn { background: rgba(108,92,231,0.2); color: var(--accent); }
     .badge-new { background: rgba(255,145,0,0.2); color: var(--orange); }
     .badge-err { background: rgba(255,82,82,0.2); color: var(--red); }
@@ -71,16 +98,17 @@
     .modal-head { padding: 0.8rem 1.2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
     .modal-head h3 { font-size: 0.95rem; font-weight: 600; }
     .close-btn { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 1.3rem; }
-    .close-btn:hover { color: var(--text); }
     .vid-wrap { background: #000; aspect-ratio: 16/9; }
     .vid-wrap video { width: 100%; height: 100%; }
     .modal-foot { padding: 0.6rem 1rem; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .url-box { flex: 1; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font-size: 0.72rem; color: var(--accent); font-family: monospace; word-break: break-all; min-width: 200px; }
+    .key-prompt { display: flex; gap: 8px; align-items: center; width: 100%; margin-bottom: 6px; }
+    .key-prompt input { flex: 1; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--cyan); font-family: monospace; font-size: 0.8rem; }
 
     .empty { grid-column: 1 / -1; text-align: center; padding: 4rem; color: var(--dim); }
     .empty .icon { font-size: 3rem; margin-bottom: 1rem; }
 
-    .toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 18px; border-radius: 10px; font-size: 0.8rem; font-weight: 500; z-index: 2000; display: none; animation: slideIn 0.3s; }
+    .toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 18px; border-radius: 10px; font-size: 0.8rem; font-weight: 500; z-index: 2000; display: none; animation: slideIn 0.3s; max-width: 400px; }
     @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } }
     .toast.success { background: rgba(0,230,118,0.15); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
     .toast.error { background: rgba(255,82,82,0.15); color: var(--red); border: 1px solid rgba(255,82,82,0.3); }
@@ -93,25 +121,60 @@
   <div class="logo">📺 YouTube HLS Server</div>
   <div class="pills">
     <span class="pill" id="pVid">0 videos</span>
-    <span class="pill" id="pCache">0 cached</span>
+    <span class="pill" id="pUp">0 uploads</span>
     <span class="pill" id="pCookie">cookies ?</span>
   </div>
 </div>
 
 <div class="container">
-  <div class="add-bar">
-    <input id="inp" placeholder="YouTube URL hoặc Video ID  (vd: https://youtu.be/xxx hoặc dQw4w9WgXcQ)" onkeydown="if(event.key==='Enter') add()">
-    <button class="btn btn-yt" onclick="add()" id="addBtn">+ Thêm Video</button>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('yt')">🎬 YouTube</div>
+    <div class="tab" onclick="switchTab('up')">📤 Upload & Encrypt</div>
   </div>
-  <div class="grid" id="grid"></div>
+
+  <!-- YouTube Tab -->
+  <div class="tab-content active" id="tab-yt">
+    <div class="add-bar">
+      <input id="inp" placeholder="YouTube URL hoặc Video ID (vd: dQw4w9WgXcQ)" onkeydown="if(event.key==='Enter') add()">
+      <button class="btn btn-yt" onclick="add()" id="addBtn">+ Thêm</button>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <!-- Upload Tab -->
+  <div class="tab-content" id="tab-up">
+    <div class="upload-form">
+      <div class="form-row">
+        <label>📁 File</label>
+        <input type="file" id="upFile" accept=".mp4,.mkv,.avi,.mov,.webm,.flv,.ts,.m4v">
+      </div>
+      <div class="form-row">
+        <label>📝 Title</label>
+        <input id="upTitle" placeholder="Tên video (tùy chọn)">
+      </div>
+      <div class="form-row">
+        <label>🔑 Key</label>
+        <input id="upKey" class="key-input" placeholder="Nhập key mã hóa (bắt buộc)" type="password">
+        <button class="btn btn-ghost btn-sm" onclick="toggleKey('upKey', this)">👁</button>
+      </div>
+      <div class="form-row">
+        <button class="btn btn-cyan" onclick="uploadVideo()" id="upBtn">📤 Upload & Encrypt</button>
+        <span id="upStatus" style="font-size:0.78rem;color:var(--dim)"></span>
+      </div>
+      <div class="progress-bar" id="upProgress"><div class="progress-fill" id="upFill"></div></div>
+    </div>
+    <div class="grid" id="upGrid"></div>
+  </div>
 </div>
 
+<!-- Player Modal -->
 <div class="overlay" id="modal" onclick="if(event.target===this) closeP()">
   <div class="modal">
     <div class="modal-head">
       <h3 id="pTitle">Video</h3>
       <button class="close-btn" onclick="closeP()">✕</button>
     </div>
+    <div id="keyPromptArea"></div>
     <div class="vid-wrap"><video id="vid" controls autoplay></video></div>
     <div class="modal-foot">
       <div class="url-box" id="pUrl"></div>
@@ -125,55 +188,100 @@
 <script>
 let hls = null, currentUrl = '';
 
-function toast(msg, t='info') { const el = document.getElementById('toast'); el.textContent = msg; el.className = `toast ${t}`; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3500); }
+function toast(msg, t='info') { const el = document.getElementById('toast'); el.textContent = msg; el.className = `toast ${t}`; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 4000); }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fsize(b) { if (b < 1024) return b+'B'; if (b < 1048576) return (b/1024).toFixed(1)+'KB'; return (b/1048576).toFixed(1)+'MB'; }
 
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((el,i) => { el.classList.toggle('active', (t==='yt' ? i===0 : i===1)); });
+  document.getElementById('tab-yt').classList.toggle('active', t==='yt');
+  document.getElementById('tab-up').classList.toggle('active', t==='up');
+}
+
+function toggleKey(id, btn) {
+  const inp = document.getElementById(id);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function clipCopy(text) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText='position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+  return Promise.resolve();
+}
+function copyUrl() { clipCopy(currentUrl).then(() => toast('📋 Copied!','success')).catch(() => toast('Copy failed','error')); }
+
+// ===== STATUS =====
 async function loadStatus() {
   try {
     const d = await (await fetch('/api/status')).json();
     document.getElementById('pVid').textContent = `${d.total_videos} videos`;
     document.getElementById('pVid').className = `pill ${d.total_videos > 0 ? 'ok' : 'warn'}`;
-    document.getElementById('pCache').textContent = `${d.cached_videos} cached`;
-    document.getElementById('pCache').className = `pill ${d.cached_videos > 0 ? 'ok' : 'warn'}`;
+    document.getElementById('pUp').textContent = `${d.total_uploads||0} uploads`;
+    document.getElementById('pUp').className = `pill ${(d.total_uploads||0) > 0 ? 'ok' : 'warn'}`;
     document.getElementById('pCookie').textContent = d.cookies_exist ? 'cookies ✅' : 'no cookies';
     document.getElementById('pCookie').className = `pill ${d.cookies_exist ? 'ok' : 'warn'}`;
   } catch(e) {}
 }
 
+// ===== YOUTUBE VIDEOS =====
 async function loadVideos() {
   try {
     const d = await (await fetch('/api/videos')).json();
     const g = document.getElementById('grid');
-    if (!d.videos.length) { g.innerHTML = `<div class="empty"><div class="icon">📺</div>Chưa có video.<br>Paste YouTube URL để bắt đầu!</div>`; return; }
-
+    if (!d.videos.length) { g.innerHTML = `<div class="empty"><div class="icon">🎬</div>Chưa có video YouTube.<br>Paste URL để bắt đầu!</div>`; return; }
     g.innerHTML = d.videos.map(v => {
       const bc = v.cached ? 'badge-ready' : v.has_cdn ? 'badge-cdn' : v.status?.includes('error') ? 'badge-err' : 'badge-new';
-      const bt = v.cached ? '✅ HLS Ready' : v.has_cdn ? '📡 CDN OK' : v.status?.includes('error') ? '❌ Error' : '🆕 New';
-      return `
-        <div class="card">
-          <div class="thumb" onclick="playProxy('${v.id}')">
-            ${v.thumbnail ? `<img src="${v.thumbnail}" onerror="this.style.display='none'">` : '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-size:2rem">🎬</div>'}
-            <div class="play-overlay"><div class="play-icon">▶</div></div>
-            <span class="badge ${bc}">${bt}</span>
+      const bt = v.cached ? '✅ HLS' : v.has_cdn ? '📡 CDN' : v.status?.includes('error') ? '❌' : '🆕';
+      return `<div class="card">
+        <div class="thumb" onclick="playProxy('${v.id}')">
+          ${v.thumbnail ? `<img src="${v.thumbnail}" onerror="this.style.display='none'">` : '<div style="color:var(--dim);font-size:2rem">🎬</div>'}
+          <div class="play-overlay"><div class="play-icon">▶</div></div>
+          <span class="badge ${bc}">${bt}</span>
+        </div>
+        <div class="info">
+          <div class="title">${esc(v.title||v.id)}</div>
+          <div class="meta">${v.id} • ${v.duration||'?'}s</div>
+          <div class="actions">
+            <button class="btn btn-accent btn-sm" onclick="playProxy('${v.id}')">▶ Play</button>
+            ${v.cached ? `<button class="btn btn-ghost btn-sm" onclick="playHls('${v.id}')">📡 HLS</button>` : `<button class="btn btn-ghost btn-sm" onclick="prepare('${v.id}',this)">⚡ HLS</button>`}
+            <button class="btn btn-ghost btn-sm" onclick="getCdn('${v.id}')">🔗 CDN</button>
+            <button class="btn btn-danger btn-sm" onclick="del('${v.id}')">🗑</button>
           </div>
-          <div class="info">
-            <div class="title">${esc(v.title || v.id)}</div>
-            <div class="meta">${v.id} • ${v.duration || '?'}s</div>
-            <div class="actions">
-              <button class="btn btn-accent btn-sm" onclick="playProxy('${v.id}')">▶ Proxy Play</button>
-              ${v.cached
-                ? `<button class="btn btn-ghost btn-sm" onclick="playHls('${v.id}')">📡 HLS</button>`
-                : `<button class="btn btn-ghost btn-sm" onclick="prepare('${v.id}', this)">⚡ Prepare HLS</button>`
-              }
-              <button class="btn btn-ghost btn-sm" onclick="getCdn('${v.id}')">🔗 CDN</button>
-              <button class="btn btn-danger btn-sm" onclick="del('${v.id}')">🗑</button>
-            </div>
-          </div>
-        </div>`;
+        </div>
+      </div>`;
     }).join('');
-  } catch(e) { toast('Load failed', 'error'); }
+  } catch(e) {}
 }
 
+// ===== UPLOADS =====
+async function loadUploads() {
+  try {
+    const d = await (await fetch('/api/uploads')).json();
+    const g = document.getElementById('upGrid');
+    if (!d.uploads.length) { g.innerHTML = `<div class="empty"><div class="icon">📤</div>Chưa có video upload.<br>Upload file + nhập key để mã hóa!</div>`; return; }
+    g.innerHTML = d.uploads.map(v => `
+      <div class="card enc">
+        <div class="thumb" onclick="playEncrypted('${v.id}')">
+          <div style="color:var(--cyan);font-size:2rem">🔒</div>
+          <div class="play-overlay"><div class="play-icon enc-icon">▶</div></div>
+          <span class="badge badge-enc">🔐 AES-128</span>
+        </div>
+        <div class="info">
+          <div class="title">${esc(v.title)}</div>
+          <div class="meta">${v.id} • ${fsize(v.size)} • ${v.encrypted?'Encrypted':''}</div>
+          <div class="actions">
+            <button class="btn btn-cyan btn-sm" onclick="playEncrypted('${v.id}')">🔑 Play</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyEncUrl('${v.id}')">🔗 Link</button>
+            <button class="btn btn-danger btn-sm" onclick="delUp('${v.id}')">🗑</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {}
+}
+
+// ===== ADD VIDEO =====
 async function add() {
   const inp = document.getElementById('inp'), btn = document.getElementById('addBtn');
   if (!inp.value.trim()) return;
@@ -184,18 +292,65 @@ async function add() {
     if (d.success) { toast(`✅ ${d.title}`, 'success'); inp.value = ''; loadVideos(); loadStatus(); }
     else toast(`❌ ${d.error}`, 'error');
   } catch(e) { toast('Error', 'error'); }
-  btn.disabled = false; btn.textContent = '+ Thêm Video';
+  btn.disabled = false; btn.textContent = '+ Thêm';
 }
 
+// ===== UPLOAD =====
+async function uploadVideo() {
+  const fileEl = document.getElementById('upFile');
+  const key = document.getElementById('upKey').value.trim();
+  const title = document.getElementById('upTitle').value.trim();
+  const btn = document.getElementById('upBtn');
+  const status = document.getElementById('upStatus');
+
+  if (!fileEl.files.length) return toast('Chọn file video!', 'error');
+  if (!key) return toast('Nhập key mã hóa!', 'error');
+
+  const file = fileEl.files[0];
+  const form = new FormData();
+  form.append('file', file);
+  form.append('key', key);
+  form.append('title', title);
+
+  btn.disabled = true; btn.textContent = '⏳ Uploading...';
+  const prog = document.getElementById('upProgress');
+  const fill = document.getElementById('upFill');
+  prog.style.display = 'block';
+
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        fill.style.width = pct + '%';
+        status.textContent = pct < 100 ? `Uploading ${pct}%...` : '🔄 Encoding + encrypting...';
+      }
+    };
+    xhr.onload = () => {
+      try {
+        const d = JSON.parse(xhr.responseText);
+        if (d.success) { toast(`✅ ${d.message}`, 'success'); fileEl.value=''; loadUploads(); loadStatus(); status.textContent='✅ Done!'; }
+        else { toast(`❌ ${d.error}`, 'error'); status.textContent='❌ Error'; }
+      } catch(e) { toast('Response error','error'); status.textContent='❌'; }
+      btn.disabled = false; btn.textContent = '📤 Upload & Encrypt';
+      setTimeout(() => { prog.style.display='none'; fill.style.width='0%'; }, 2000);
+    };
+    xhr.onerror = () => { toast('Upload failed','error'); btn.disabled=false; btn.textContent='📤 Upload & Encrypt'; status.textContent='❌'; };
+    xhr.open('POST', '/api/upload');
+    xhr.send(form);
+  } catch(e) { toast('Error','error'); btn.disabled=false; btn.textContent='📤 Upload & Encrypt'; }
+}
+
+// ===== PLAYERS =====
 function playProxy(id) {
-  const url = `/proxy/${id}`;
-  currentUrl = `${location.origin}${url}`;
+  currentUrl = `${location.origin}/proxy/${id}`;
   document.getElementById('pTitle').textContent = id;
   document.getElementById('pUrl').textContent = currentUrl;
+  document.getElementById('keyPromptArea').innerHTML = '';
   document.getElementById('modal').classList.add('on');
   const v = document.getElementById('vid');
   if (hls) { hls.destroy(); hls = null; }
-  v.src = url;
+  v.src = `/proxy/${id}`;
   v.play().catch(() => {});
 }
 
@@ -204,6 +359,7 @@ function playHls(id) {
   currentUrl = `${location.origin}${url}`;
   document.getElementById('pTitle').textContent = `${id} (HLS)`;
   document.getElementById('pUrl').textContent = currentUrl;
+  document.getElementById('keyPromptArea').innerHTML = '';
   document.getElementById('modal').classList.add('on');
   const v = document.getElementById('vid');
   if (hls) { hls.destroy(); }
@@ -215,6 +371,39 @@ function playHls(id) {
   } else { v.src = url; v.play(); }
 }
 
+function playEncrypted(uid) {
+  currentUrl = `${location.origin}/hls/${uid}/index.m3u8`;
+  document.getElementById('pTitle').textContent = `🔒 ${uid}`;
+  document.getElementById('pUrl').textContent = currentUrl;
+  // Show key prompt
+  document.getElementById('keyPromptArea').innerHTML = `
+    <div class="key-prompt" style="padding:0.6rem 1.2rem;">
+      <span style="font-size:0.8rem;color:var(--cyan)">🔑 Key:</span>
+      <input id="playKey" class="key-input" type="password" placeholder="Nhập key để giải mã" style="flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--cyan);font-family:monospace;font-size:0.8rem;">
+      <button class="btn btn-cyan btn-sm" onclick="startEncPlay('${uid}')">▶ Play</button>
+    </div>`;
+  document.getElementById('modal').classList.add('on');
+}
+
+function startEncPlay(uid) {
+  const url = `/hls/${uid}/index.m3u8`;
+  const v = document.getElementById('vid');
+  if (hls) { hls.destroy(); }
+  if (Hls.isSupported()) {
+    hls = new Hls({
+      xhrSetup: (xhr) => {
+        // HLS.js will fetch key from the URI in m3u8 which points to /api/key/{uid}
+      }
+    });
+    hls.loadSource(url);
+    hls.attachMedia(v);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
+    hls.on(Hls.Events.ERROR, (e, data) => {
+      if (data.details === 'keyLoadError') toast('❌ Key mã hóa không đúng!', 'error');
+    });
+  } else { v.src = url; v.play(); }
+}
+
 function closeP() {
   document.getElementById('modal').classList.remove('on');
   const v = document.getElementById('vid');
@@ -222,60 +411,42 @@ function closeP() {
   if (hls) { hls.destroy(); hls = null; }
 }
 
-function clipCopy(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    return navigator.clipboard.writeText(text);
-  }
-  const ta = document.createElement('textarea');
-  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-  document.body.appendChild(ta); ta.select();
-  document.execCommand('copy');
-  document.body.removeChild(ta);
-  return Promise.resolve();
+function copyEncUrl(uid) {
+  clipCopy(`${location.origin}/hls/${uid}/index.m3u8`).then(() => toast('📋 HLS URL copied!','success'));
 }
 
-function copyUrl() {
-  clipCopy(currentUrl).then(() => toast('📋 Copied!', 'success')).catch(() => toast('Copy failed', 'error'));
-}
-
+// ===== CDN =====
 async function getCdn(id) {
   toast('🔄 Extracting CDN URL...', 'info');
   try {
     const r = await fetch(`/api/cdn/${id}`);
     const d = await r.json();
     if (d.url) {
-      clipCopy(d.url).then(() => {
-        toast(`📋 CDN URL copied! (expires ${Math.round(d.expires_in/60)}min)`, 'success');
-      }).catch(() => {
-        prompt('Copy this CDN URL:', d.url);
-      });
+      clipCopy(d.url).then(() => toast(`📋 CDN URL copied! (${Math.round(d.expires_in/60)}min)`,'success')).catch(() => prompt('Copy:',d.url));
       loadVideos();
     } else toast(`❌ ${d.error}`, 'error');
   } catch(e) { toast(`Error: ${e.message}`, 'error'); }
 }
 
 async function prepare(id, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
-  toast('🔄 Extracting + transcoding HLS...', 'info');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  toast('🔄 Transcoding HLS...', 'info');
   try {
     const r = await fetch(`/api/prepare/${id}`, {method: 'POST'});
     const d = await r.json();
     if (d.success || d.cached) { toast('✅ HLS ready!', 'success'); loadVideos(); loadStatus(); }
-    else if (d.status === 'processing') toast('⏳ Already processing...', 'info');
+    else if (d.status === 'processing') toast('⏳ Processing...', 'info');
     else toast(`❌ ${d.error}`, 'error');
   } catch(e) { toast('Error', 'error'); }
-  if (btn) { btn.disabled = false; btn.textContent = '⚡ Prepare HLS'; }
+  if (btn) { btn.disabled = false; btn.textContent = '⚡ HLS'; }
 }
 
-async function del(id) {
-  if (!confirm(`Xóa ${id}?`)) return;
-  await fetch(`/api/videos/${id}`, {method: 'DELETE'});
-  toast('🗑 Deleted', 'info');
-  loadVideos(); loadStatus();
-}
+async function del(id) { if (!confirm(`Xóa ${id}?`)) return; await fetch(`/api/videos/${id}`,{method:'DELETE'}); toast('🗑','info'); loadVideos(); loadStatus(); }
+async function delUp(id) { if (!confirm(`Xóa upload ${id}?`)) return; await fetch(`/api/uploads/${id}`,{method:'DELETE'}); toast('🗑','info'); loadUploads(); loadStatus(); }
 
-loadStatus(); loadVideos();
-setInterval(() => { loadStatus(); loadVideos(); }, 15000);
+// Init
+loadStatus(); loadVideos(); loadUploads();
+setInterval(() => { loadStatus(); loadVideos(); loadUploads(); }, 15000);
 </script>
 </body>
 </html>
