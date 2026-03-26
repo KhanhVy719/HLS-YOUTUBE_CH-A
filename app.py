@@ -66,31 +66,59 @@ def get_lock(video_id):
 
 
 # ============ YT-DLP ============
+def update_ytdlp():
+    """Auto-update yt-dlp on startup."""
+    try:
+        subprocess.run(["pip3", "install", "-U", "yt-dlp"], capture_output=True, timeout=60, env=SUB_ENV)
+        print("✅ yt-dlp updated")
+    except Exception as e:
+        print(f"⚠️ yt-dlp update skipped: {e}")
+
+
+def _run_ytdlp(args, timeout=120):
+    """Run yt-dlp with given args, return (stdout, stderr, returncode)."""
+    cmd = ["yt-dlp"] + args
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=SUB_ENV)
+        return r.stdout.strip(), r.stderr.strip(), r.returncode
+    except subprocess.TimeoutExpired:
+        return "", "timeout", 1
+
+
 def get_cdn_url(video_id, force=False):
-    """Get YouTube CDN direct URL via yt-dlp, with caching."""
+    """Get YouTube CDN direct URL via yt-dlp, with caching and fallback strategies."""
     # Check cache
     if not force and video_id in _url_cache:
         entry = _url_cache[video_id]
         if time.time() < entry["expires"]:
             return entry["url"], None
 
-    cmd = [
-        "yt-dlp", "-g", "-f", "best[ext=mp4]/best",
-        "--remote-components", "ejs:github",
-    ]
-    if COOKIES_FILE.exists():
-        cmd.extend(["--cookies", str(COOKIES_FILE)])
-    cmd.append(f"https://www.youtube.com/watch?v={video_id}")
+    yt_url = f"https://www.youtube.com/watch?v={video_id}"
+    cookies_args = ["--cookies", str(COOKIES_FILE)] if COOKIES_FILE.exists() else []
 
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=SUB_ENV)
-        if result.returncode == 0:
-            url = result.stdout.strip().split('\n')[0]
+    # Strategy 1: web client + cookies + deno
+    strategies = [
+        ["-g", "-f", "best[ext=mp4]/best", "--remote-components", "ejs:github"] + cookies_args + [yt_url],
+        # Strategy 2: android client (bypasses many restrictions)
+        ["-g", "-f", "best[ext=mp4]/best", "--extractor-args", "youtube:player_client=android"] + cookies_args + [yt_url],
+        # Strategy 3: no cookies, no special args (for public videos)
+        ["-g", "-f", "best[ext=mp4]/best", "--no-check-certificates", yt_url],
+        # Strategy 4: ios client
+        ["-g", "-f", "best", "--extractor-args", "youtube:player_client=ios"] + cookies_args + [yt_url],
+    ]
+
+    last_err = ""
+    for i, args in enumerate(strategies):
+        stdout, stderr, rc = _run_ytdlp(args, timeout=120)
+        if rc == 0 and stdout:
+            url = stdout.split('\n')[0]
             _url_cache[video_id] = {"url": url, "expires": time.time() + URL_TTL}
+            print(f"  ✅ Strategy {i+1} worked for {video_id}")
             return url, None
-        return None, result.stderr.strip()[-300:]
-    except subprocess.TimeoutExpired:
-        return None, "yt-dlp timeout"
+        last_err = stderr[-300:] if stderr else "unknown error"
+        print(f"  ❌ Strategy {i+1} failed: {last_err[:100]}")
+
+    return None, last_err
 
 
 def get_video_info(video_id):
@@ -311,6 +339,7 @@ def status():
 
 
 if __name__ == "__main__":
+    update_ytdlp()
     print("📺 YouTube HLS Streaming Server")
     print(f"📂 HLS Cache: {HLS_DIR}")
     print(f"🍪 Cookies: {COOKIES_FILE} ({'✅' if COOKIES_FILE.exists() else '❌'})")
