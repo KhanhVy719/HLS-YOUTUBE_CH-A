@@ -336,6 +336,9 @@ async function pushVideo() {
   const form = new FormData();
   form.append('file', file);
   form.append('title', title);
+  // Send stream key from input (or empty to use saved key)
+  const sk = document.getElementById('skInput').value.trim();
+  if (sk) form.append('key', sk);
 
   btn.disabled=true; btn.textContent='⏳ Uploading...';
   const prog=document.getElementById('upProgress');
