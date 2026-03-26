@@ -336,35 +336,54 @@ def serve_hls(video_id, filename):
 @app.route("/api/status")
 def status():
     db = load_db()
-    uploads = db.get("uploads", {})
+    streams = db.get("streams", {})
     return jsonify({
         "total_videos": len(db["videos"]),
         "cached_videos": sum(1 for v in db["videos"] if (HLS_DIR / v / "index.m3u8").exists()),
-        "total_uploads": len(uploads),
+        "total_streams": len(streams),
         "hls_dir": str(HLS_DIR),
         "cookies_exist": COOKIES_FILE.exists(),
     })
 
 
-# ====== UPLOAD + ENCRYPT ======
-def derive_key(passphrase):
-    """Derive a 16-byte AES key from passphrase."""
-    return hashlib.sha256(passphrase.encode()).digest()[:16]
+# ====== STREAM KEY CONFIG ======
+@app.route("/api/streamkey", methods=["GET"])
+def get_streamkey():
+    """Get saved stream key (masked)."""
+    db = load_db()
+    key = db.get("stream_key", "")
+    if key:
+        masked = key[:4] + "****" + key[-4:] if len(key) > 8 else "****"
+        return jsonify({"has_key": True, "masked": masked})
+    return jsonify({"has_key": False})
 
 
-def gen_key_iv():
-    """Generate random 16-byte key and IV."""
-    return secrets.token_bytes(16), secrets.token_bytes(16)
+@app.route("/api/streamkey", methods=["POST"])
+def set_streamkey():
+    """Save YouTube Live stream key."""
+    data = request.json or {}
+    key = data.get("key", "").strip()
+    if not key:
+        return jsonify({"error": "Stream key is required"}), 400
+    db = load_db()
+    db["stream_key"] = key
+    save_db(db)
+    return jsonify({"success": True, "message": "Stream key saved"})
+
+
+# ====== UPLOAD → PUSH TO YOUTUBE LIVE ======
+RTMP_URL = "rtmp://a.rtmp.youtube.com/live2"
+_stream_jobs = {}  # {uid: {"status": ..., "pid": ...}}
 
 
 @app.route("/api/upload", methods=["POST"])
 def upload_video():
-    """Upload video file → encrypt → transcode to AES-128 HLS."""
+    """Upload video file → push to YouTube Live via RTMP."""
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
     f = request.files["file"]
-    passkey = request.form.get("key", "").strip()
+    stream_key = request.form.get("key", "").strip()
     title = request.form.get("title", "").strip()
 
     if not f.filename:
@@ -374,133 +393,125 @@ def upload_video():
     if ext not in ALLOWED_EXT:
         return jsonify({"error": f"File type .{ext} not allowed"}), 400
 
-    if not passkey:
-        return jsonify({"error": "Encryption key is required"}), 400
+    # Use provided key or saved key
+    if not stream_key:
+        db = load_db()
+        stream_key = db.get("stream_key", "")
+    if not stream_key:
+        return jsonify({"error": "YouTube stream key is required"}), 400
 
-    # Generate unique ID
-    uid = f"up_{secrets.token_hex(6)}"
+    # Save stream key for reuse
+    db = load_db()
+    db["stream_key"] = stream_key
+    save_db(db)
+
+    # Generate unique ID and save file
+    uid = f"st_{secrets.token_hex(6)}"
     safe_name = secure_filename(f.filename)
     upload_path = UPLOAD_DIR / f"{uid}_{safe_name}"
-
-    # Save uploaded file
     f.save(str(upload_path))
     file_size = upload_path.stat().st_size
 
-    # Derive AES key from passphrase
-    aes_key = derive_key(passkey)
-    aes_iv = secrets.token_bytes(16)
-
-    # Save key info file
-    out_dir = HLS_DIR / uid
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    key_file = out_dir / "enc.key"
-    key_file.write_bytes(aes_key)
-
-    iv_hex = aes_iv.hex()
-
-    # Create key info file for FFmpeg
-    # Format: key_uri\nkey_file_path\niv
-    key_info_file = out_dir / "key_info.txt"
-    key_info_file.write_text(f"/api/key/{uid}?key={{key}}\n{key_file}\n{iv_hex}\n")
-
-    # FFmpeg: transcode to AES-128 encrypted HLS
-    playlist = out_dir / "index.m3u8"
-    cmd = [
-        "ffmpeg", "-y", "-i", str(upload_path),
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-        "-c:a", "aac", "-b:a", "128k",
-        "-hls_time", "6", "-hls_list_size", "0",
-        "-hls_key_info_file", str(key_info_file),
-        "-hls_segment_filename", str(out_dir / "seg_%03d.ts"),
-        "-f", "hls", str(playlist)
-    ]
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, env=SUB_ENV)
-        if result.returncode != 0 or not playlist.exists():
-            upload_path.unlink(missing_ok=True)
-            return jsonify({"error": f"FFmpeg failed: {result.stderr[-300:]}"}), 500
-    except subprocess.TimeoutExpired:
-        upload_path.unlink(missing_ok=True)
-        return jsonify({"error": "Encoding timeout (>30min)"}), 504
-
-    # Fix m3u8: replace key URI placeholder with actual endpoint
-    m3u8_content = playlist.read_text()
-    m3u8_content = m3u8_content.replace("/api/key/{uid}?key={key}", f"/api/key/{uid}")
-    playlist.write_text(m3u8_content)
-
-    # Clean up source file
-    upload_path.unlink(missing_ok=True)
-
     # Save to DB
-    db = load_db()
-    if "uploads" not in db:
-        db["uploads"] = {}
-    db["uploads"][uid] = {
+    if "streams" not in db:
+        db["streams"] = {}
+    db["streams"][uid] = {
         "title": title or safe_name,
         "filename": safe_name,
         "size": file_size,
-        "encrypted": True,
-        "key_hash": hashlib.sha256(passkey.encode()).hexdigest()[:16],
         "added_at": int(time.time()),
-        "status": "ready",
+        "status": "uploading",
     }
     save_db(db)
+
+    # Start RTMP push in background thread
+    def push_rtmp():
+        try:
+            _stream_jobs[uid] = {"status": "encoding", "file": str(upload_path)}
+
+            rtmp_dest = f"{RTMP_URL}/{stream_key}"
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-re",  # Read at native frame rate
+                "-i", str(upload_path),
+                "-c:v", "libx264", "-preset", "veryfast",
+                "-maxrate", "4500k", "-bufsize", "9000k",
+                "-pix_fmt", "yuv420p",
+                "-g", "60",  # Keyframe every 2 sec at 30fps
+                "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+                "-f", "flv",
+                rtmp_dest
+            ]
+
+            _stream_jobs[uid]["status"] = "streaming"
+            db2 = load_db()
+            db2["streams"][uid]["status"] = "streaming"
+            save_db(db2)
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=7200, env=SUB_ENV)
+
+            db3 = load_db()
+            if result.returncode == 0:
+                db3["streams"][uid]["status"] = "done"
+                _stream_jobs[uid]["status"] = "done"
+            else:
+                err = result.stderr[-200:] if result.stderr else "unknown"
+                db3["streams"][uid]["status"] = f"error: {err[:100]}"
+                _stream_jobs[uid]["status"] = "error"
+            save_db(db3)
+
+        except subprocess.TimeoutExpired:
+            db4 = load_db()
+            db4["streams"][uid]["status"] = "error: timeout"
+            save_db(db4)
+            _stream_jobs[uid]["status"] = "timeout"
+        except Exception as e:
+            db5 = load_db()
+            db5["streams"][uid]["status"] = f"error: {str(e)[:100]}"
+            save_db(db5)
+            _stream_jobs[uid]["status"] = "error"
+        finally:
+            # Clean up source file
+            upload_path.unlink(missing_ok=True)
+
+    thread = threading.Thread(target=push_rtmp, daemon=True)
+    thread.start()
 
     return jsonify({
         "success": True,
         "id": uid,
-        "stream_url": f"/hls/{uid}/index.m3u8",
-        "message": "Video encrypted and ready for HLS streaming"
+        "message": f"Video queued for YouTube Live push ({fsize(file_size)})"
     })
 
 
-@app.route("/api/key/<uid>")
-def serve_key(uid):
-    """Serve AES-128 decryption key (requires passphrase via query param or header)."""
-    key_file = HLS_DIR / uid / "enc.key"
-    if not key_file.exists():
-        return jsonify({"error": "Key not found"}), 404
+def fsize(b):
+    if b < 1024: return f"{b}B"
+    if b < 1048576: return f"{b/1024:.1f}KB"
+    if b < 1073741824: return f"{b/1048576:.1f}MB"
+    return f"{b/1073741824:.1f}GB"
 
-    # Optional: validate passphrase
-    passkey = request.args.get("key", "") or request.headers.get("X-Key", "")
+
+@app.route("/api/streams", methods=["GET"])
+def list_streams():
+    """List all stream push jobs."""
     db = load_db()
-    upload_info = db.get("uploads", {}).get(uid)
-
-    if upload_info and passkey:
-        expected_hash = upload_info.get("key_hash", "")
-        provided_hash = hashlib.sha256(passkey.encode()).hexdigest()[:16]
-        if provided_hash != expected_hash:
-            return Response("Invalid key", status=403)
-
-    # Return the raw key bytes
-    key_data = key_file.read_bytes()
-    resp = Response(key_data, content_type="application/octet-stream")
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    return resp
+    streams = []
+    for uid, info in db.get("streams", {}).items():
+        # Update from live job status
+        if uid in _stream_jobs:
+            info["live_status"] = _stream_jobs[uid]["status"]
+        streams.append({**info, "id": uid})
+    return jsonify({"streams": streams})
 
 
-@app.route("/api/uploads", methods=["GET"])
-def list_uploads():
-    """List all uploaded + encrypted videos."""
+@app.route("/api/streams/<uid>", methods=["DELETE"])
+def delete_stream(uid):
     db = load_db()
-    uploads = []
-    for uid, info in db.get("uploads", {}).items():
-        has_hls = (HLS_DIR / uid / "index.m3u8").exists()
-        uploads.append({**info, "id": uid, "has_hls": has_hls})
-    return jsonify({"uploads": uploads})
-
-
-@app.route("/api/uploads/<uid>", methods=["DELETE"])
-def delete_upload(uid):
-    db = load_db()
-    if uid not in db.get("uploads", {}):
+    if uid not in db.get("streams", {}):
         return jsonify({"error": "Not found"}), 404
-    del db["uploads"][uid]
+    del db["streams"][uid]
     save_db(db)
-    import shutil
-    shutil.rmtree(HLS_DIR / uid, ignore_errors=True)
     return jsonify({"success": True})
 
 
@@ -515,6 +526,6 @@ if __name__ == "__main__":
     print(f"   /proxy/VIDEO_ID     → Direct proxy stream")
     print(f"   /api/cdn/VIDEO_ID   → Get YouTube CDN URL")
     print(f"   /hls/VIDEO_ID/      → HLS m3u8 (after prepare)")
-    print(f"   /api/upload         → Upload + encrypt video")
-    print(f"   /api/key/UID        → AES-128 key endpoint")
+    print(f"   /api/upload         → Upload + push to YouTube Live")
+    print(f"   /api/streamkey      → Set/get YouTube stream key")
     app.run(host="0.0.0.0", port=PORT, debug=True, threaded=True)
