@@ -19,6 +19,11 @@ HLS_DIR = DATA_DIR / "hls"
 DB_FILE = DATA_DIR / "videos.json"
 COOKIES_FILE = Path(os.environ.get("COOKIES_FILE", "/root/cookies.txt"))
 PORT = int(os.environ.get("PORT", "5555"))
+DENO_DIR = os.path.expanduser("~/.deno/bin")
+
+# Subprocess env with deno in PATH
+SUB_ENV = os.environ.copy()
+SUB_ENV["PATH"] = DENO_DIR + ":" + SUB_ENV.get("PATH", "")
 
 HLS_DIR.mkdir(parents=True, exist_ok=True)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -49,13 +54,13 @@ def get_lock(video_id):
 
 def extract_youtube_url(video_id):
     """Use yt-dlp to get direct video URL from YouTube."""
-    cmd = ["yt-dlp", "-g", "-f", "best[ext=mp4]/best"]
+    cmd = ["yt-dlp", "-g", "-f", "best[ext=mp4]/best", "--remote-components", "ejs:github"]
     if COOKIES_FILE.exists():
         cmd.extend(["--cookies", str(COOKIES_FILE)])
     cmd.append(f"https://www.youtube.com/watch?v={video_id}")
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=SUB_ENV)
         if result.returncode == 0:
             url = result.stdout.strip().split('\n')[0]
             return url, None
@@ -98,13 +103,13 @@ def transcode_to_hls(video_id, source_url):
 
 def get_video_info(video_id):
     """Get video title and metadata from yt-dlp."""
-    cmd = ["yt-dlp", "--print", "title", "--print", "duration", "--print", "thumbnail", "--no-download"]
+    cmd = ["yt-dlp", "--print", "title", "--print", "duration", "--print", "thumbnail", "--no-download", "--remote-components", "ejs:github"]
     if COOKIES_FILE.exists():
         cmd.extend(["--cookies", str(COOKIES_FILE)])
     cmd.append(f"https://www.youtube.com/watch?v={video_id}")
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=SUB_ENV)
         if result.returncode == 0:
             lines = result.stdout.strip().split('\n')
             return {
