@@ -361,10 +361,14 @@ def derive_key_bytes(passphrase):
     return hashlib.sha256(passphrase.encode()).digest()
 
 
-def make_geq_filter(kr, kg, kb):
-    """Build FFmpeg geq filter string with properly escaped commas."""
-    # FFmpeg filter_complex needs commas escaped as \\, in subprocess
-    return f"geq=r='bitxor(r(X\\,Y)\\,{kr})':g='bitxor(g(X\\,Y)\\,{kg})':b='bitxor(b(X\\,Y)\\,{kb})'"
+def write_filter_file(uid, kr, kg, kb):
+    """Write FFmpeg lutrgb filter to a temp file to avoid escaping issues.
+    lutrgb is a fast lookup-table based filter (vs slow geq per-pixel eval).
+    XOR is self-reversing: encrypt and decrypt use the same filter."""
+    filter_str = f"lutrgb=r='bitxor(val,{kr})':g='bitxor(val,{kg})':b='bitxor(val,{kb})'"
+    fpath = VAULT_DIR / f"{uid}_filter.txt"
+    fpath.write_text(filter_str)
+    return str(fpath)
 
 
 # ====== STREAM KEY ======
@@ -425,7 +429,7 @@ def encrypt_and_push():
 
     key_bytes = derive_key_bytes(passkey)
     kr, kg, kb = key_bytes[0], key_bytes[1], key_bytes[2]
-    geq = make_geq_filter(kr, kg, kb)
+    filter_file = write_filter_file(uid, kr, kg, kb)
 
     # Save to DB
     if "vault" not in db:
@@ -450,7 +454,7 @@ def encrypt_and_push():
                 "ffmpeg", "-y",
                 "-re",  # Real-time speed
                 "-i", str(src_path),
-                "-vf", geq,
+                "-filter_script:v", filter_file,
                 "-c:v", "libx264", "-preset", "veryfast",
                 "-maxrate", "4500k", "-bufsize", "9000k",
                 "-pix_fmt", "yuv420p",
@@ -487,6 +491,7 @@ def encrypt_and_push():
             save_db(db5)
         finally:
             src_path.unlink(missing_ok=True)
+            Path(filter_file).unlink(missing_ok=True)
 
     thread = threading.Thread(target=push_encrypted, daemon=True)
     thread.start()
@@ -579,12 +584,13 @@ def decrypt_stream(video_id):
     if not cdn_url:
         return jsonify({"error": f"CDN failed: {err}"}), 500
 
-    geq = make_geq_filter(kr, kg, kb)
+    tmp_filter = f"_dec_{video_id}_{secrets.token_hex(3)}"
+    filter_file = write_filter_file(tmp_filter, kr, kg, kb)
 
     cmd = [
         "ffmpeg",
         "-i", cdn_url,
-        "-vf", geq,
+        "-filter_script:v", filter_file,
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "frag_keyframe+empty_moov+faststart",
@@ -607,6 +613,7 @@ def decrypt_stream(video_id):
             finally:
                 process.stdout.close()
                 process.wait()
+                Path(filter_file).unlink(missing_ok=True)
 
         return Response(generate(), mimetype="video/mp4", headers={
             "Access-Control-Allow-Origin": "*",
