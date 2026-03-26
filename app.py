@@ -347,19 +347,13 @@ def status():
 
 
 # ====== ENCRYPTED YOUTUBE STORAGE ======
-# Flow: Encrypt video → upload to YouTube manually → add video ID + key here
-# Stream: YouTube CDN → VPS decrypts in RAM → pipe to client (no disk writes)
+# Flow: Upload video + key + stream key → XOR encrypt pixels → RTMP push to YouTube Live
+# Stream: YouTube CDN → VPS FFmpeg reverse XOR in RAM → pipe to client (no disk)
 
 VAULT_DIR = DATA_DIR / "vault"
 VAULT_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def xor_key_stream(key_bytes, length):
-    """Generate repeating key stream for XOR."""
-    result = bytearray()
-    while len(result) < length:
-        result.extend(key_bytes)
-    return bytes(result[:length])
+RTMP_URL = "rtmp://a.rtmp.youtube.com/live2"
+_push_jobs = {}
 
 
 def derive_key_bytes(passphrase):
@@ -367,92 +361,168 @@ def derive_key_bytes(passphrase):
     return hashlib.sha256(passphrase.encode()).digest()
 
 
+def make_geq_filter(kr, kg, kb):
+    """Build FFmpeg geq filter string with properly escaped commas."""
+    # FFmpeg filter_complex needs commas escaped as \\, in subprocess
+    return f"geq=r='bitxor(r(X\\,Y)\\,{kr})':g='bitxor(g(X\\,Y)\\,{kg})':b='bitxor(b(X\\,Y)\\,{kb})'"
+
+
+# ====== STREAM KEY ======
+@app.route("/api/streamkey", methods=["GET"])
+def get_streamkey():
+    db = load_db()
+    key = db.get("stream_key", "")
+    if key:
+        masked = key[:4] + "****" + key[-4:] if len(key) > 8 else "****"
+        return jsonify({"has_key": True, "masked": masked})
+    return jsonify({"has_key": False})
+
+
+@app.route("/api/streamkey", methods=["POST"])
+def set_streamkey():
+    data = request.json or {}
+    key = data.get("key", "").strip()
+    if not key:
+        return jsonify({"error": "Stream key required"}), 400
+    db = load_db()
+    db["stream_key"] = key
+    save_db(db)
+    return jsonify({"success": True})
+
+
+# ====== ENCRYPT + RTMP PUSH ======
 @app.route("/api/encrypt", methods=["POST"])
-def encrypt_video():
-    """Upload video → XOR encrypt → return encrypted MP4 for YouTube upload."""
+def encrypt_and_push():
+    """Upload video → XOR encrypt pixels → push encrypted stream to YouTube Live."""
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
     f = request.files["file"]
     passkey = request.form.get("key", "").strip()
+    stream_key = request.form.get("stream_key", "").strip()
+    title = request.form.get("title", "").strip()
 
     if not f.filename or not passkey:
-        return jsonify({"error": "File and key are required"}), 400
+        return jsonify({"error": "File and encryption key are required"}), 400
+
+    # Use provided stream key or saved one
+    if not stream_key:
+        db = load_db()
+        stream_key = db.get("stream_key", "")
+    if not stream_key:
+        return jsonify({"error": "YouTube stream key required"}), 400
+
+    # Save stream key
+    db = load_db()
+    db["stream_key"] = stream_key
+    save_db(db)
 
     safe_name = secure_filename(f.filename)
     uid = f"enc_{secrets.token_hex(4)}"
-    src_path = VAULT_DIR / f"{uid}_src_{safe_name}"
-    enc_path = VAULT_DIR / f"{uid}_encrypted.mp4"
-
+    src_path = UPLOAD_DIR / f"{uid}_{safe_name}"
     f.save(str(src_path))
     src_size = src_path.stat().st_size
 
-    # Use FFmpeg to encrypt: read raw → XOR encrypt → re-encode
-    # This creates a visually scrambled but valid video that YouTube accepts
     key_bytes = derive_key_bytes(passkey)
+    kr, kg, kb = key_bytes[0], key_bytes[1], key_bytes[2]
+    geq = make_geq_filter(kr, kg, kb)
 
-    try:
-        # Step 1: Get video info
-        probe_cmd = [
-            "ffprobe", "-v", "quiet", "-print_format", "json",
-            "-show_streams", str(src_path)
-        ]
-        probe = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30, env=SUB_ENV)
-        # Default resolution
-        width, height = 1920, 1080
-        if probe.returncode == 0:
-            streams = json.loads(probe.stdout).get("streams", [])
-            for s in streams:
-                if s.get("codec_type") == "video":
-                    width = int(s.get("width", 1920))
-                    height = int(s.get("height", 1080))
-                    break
+    # Save to DB
+    if "vault" not in db:
+        db["vault"] = {}
+    db["vault"][uid] = {
+        "title": title or safe_name,
+        "key_hash": hashlib.sha256(passkey.encode()).hexdigest()[:16],
+        "kr": kr, "kg": kg, "kb": kb,
+        "added_at": int(time.time()),
+        "status": "pushing",
+        "yt_video_id": "",
+    }
+    save_db(db)
 
-        # Step 2: FFmpeg encrypt - re-encode with scrambled pixel data using custom filter
-        # Use the 'geq' filter to XOR each pixel with key-derived values
-        kr = key_bytes[0]
-        kg = key_bytes[1]
-        kb = key_bytes[2]
-        cmd = [
-            "ffmpeg", "-y", "-i", str(src_path),
-            "-vf", f"geq=r='bitxor(r(X,Y),{kr})':g='bitxor(g(X,Y),{kg})':b='bitxor(b(X,Y),{kb})'",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-            "-c:a", "aac", "-b:a", "128k",
-            str(enc_path)
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, env=SUB_ENV)
-        if result.returncode != 0:
+    # Background thread: encrypt + RTMP push
+    def push_encrypted():
+        try:
+            _push_jobs[uid] = {"status": "encoding+pushing"}
+            rtmp_dest = f"{RTMP_URL}/{stream_key}"
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-re",  # Real-time speed
+                "-i", str(src_path),
+                "-vf", geq,
+                "-c:v", "libx264", "-preset", "veryfast",
+                "-maxrate", "4500k", "-bufsize", "9000k",
+                "-pix_fmt", "yuv420p",
+                "-g", "60",
+                "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+                "-f", "flv",
+                rtmp_dest
+            ]
+
+            _push_jobs[uid]["status"] = "streaming"
+            db2 = load_db()
+            db2["vault"][uid]["status"] = "streaming"
+            save_db(db2)
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=7200, env=SUB_ENV)
+
+            db3 = load_db()
+            if result.returncode == 0:
+                db3["vault"][uid]["status"] = "done"
+                _push_jobs[uid]["status"] = "done"
+            else:
+                err = result.stderr[-200:] if result.stderr else "unknown"
+                db3["vault"][uid]["status"] = f"error: {err[:100]}"
+                _push_jobs[uid]["status"] = "error"
+            save_db(db3)
+
+        except subprocess.TimeoutExpired:
+            db4 = load_db()
+            db4["vault"][uid]["status"] = "error: timeout"
+            save_db(db4)
+        except Exception as e:
+            db5 = load_db()
+            db5["vault"][uid]["status"] = f"error: {str(e)[:100]}"
+            save_db(db5)
+        finally:
             src_path.unlink(missing_ok=True)
-            return jsonify({"error": f"FFmpeg encrypt failed: {result.stderr[-200:]}"}), 500
-    except Exception as e:
-        src_path.unlink(missing_ok=True)
-        return jsonify({"error": str(e)}), 500
-    finally:
-        src_path.unlink(missing_ok=True)
 
-    enc_size = enc_path.stat().st_size
+    thread = threading.Thread(target=push_encrypted, daemon=True)
+    thread.start()
 
     return jsonify({
         "success": True,
         "id": uid,
-        "enc_file": f"/download/{uid}",
-        "size": enc_size,
-        "key_r": kr, "key_g": kg, "key_b": kb,
-        "message": f"Encrypted! Download → Upload lên YouTube → Add video ID vào Vault"
+        "message": f"Encrypting + pushing to YouTube Live ({fsize(src_size)})"
     })
 
 
-@app.route("/download/<uid>")
-def download_encrypted(uid):
-    """Serve encrypted file for user to upload to YouTube."""
-    enc_path = VAULT_DIR / f"{uid}_encrypted.mp4"
-    if not enc_path.exists():
-        return jsonify({"error": "File not found"}), 404
-    return send_from_directory(str(VAULT_DIR), f"{uid}_encrypted.mp4",
-                               as_attachment=True,
-                               download_name=f"encrypted_{uid}.mp4")
+# ====== SET YOUTUBE VIDEO ID AFTER LIVESTREAM ======
+@app.route("/api/vault/<uid>/setid", methods=["POST"])
+def set_vault_ytid(uid):
+    """After livestream, set the resulting YouTube video ID."""
+    data = request.json or {}
+    yt_id = data.get("video_id", "").strip()
+    vid = parse_video_id(yt_id) if yt_id else None
+    if not vid:
+        return jsonify({"error": "Invalid video ID"}), 400
+
+    db = load_db()
+    if uid not in db.get("vault", {}):
+        return jsonify({"error": "Not found"}), 404
+
+    # Copy vault entry with YouTube video ID as new key
+    entry = db["vault"][uid].copy()
+    entry["yt_video_id"] = vid
+    entry["original_uid"] = uid
+    db["vault"][vid] = entry
+    save_db(db)
+
+    return jsonify({"success": True, "decrypt_url": f"/decrypt/{vid}"})
 
 
+# ====== ADD VAULT ENTRY DIRECTLY ======
 @app.route("/api/vault/add", methods=["POST"])
 def add_vault():
     """Add encrypted YouTube video to vault (video ID + key)."""
@@ -465,46 +535,43 @@ def add_vault():
     if not vid:
         return jsonify({"error": "Invalid YouTube video ID"}), 400
     if not passkey:
-        return jsonify({"error": "Decryption key required"}), 400
+        return jsonify({"error": "Key required"}), 400
 
     key_bytes = derive_key_bytes(passkey)
-
     db = load_db()
     if "vault" not in db:
         db["vault"] = {}
 
     db["vault"][vid] = {
         "title": title or vid,
-        "key_r": key_bytes[0],
-        "key_g": key_bytes[1],
-        "key_b": key_bytes[2],
+        "kr": key_bytes[0], "kg": key_bytes[1], "kb": key_bytes[2],
         "key_hash": hashlib.sha256(passkey.encode()).hexdigest()[:16],
         "added_at": int(time.time()),
+        "status": "ready",
+        "yt_video_id": vid,
     }
     save_db(db)
+    return jsonify({"success": True, "id": vid})
 
-    return jsonify({"success": True, "id": vid, "decrypt_url": f"/decrypt/{vid}?key={passkey}"})
 
-
+# ====== DECRYPT PROXY STREAM ======
 @app.route("/decrypt/<video_id>")
 def decrypt_stream(video_id):
-    """Fetch encrypted video from YouTube CDN → decrypt in RAM → stream to client.
-    NO FILE IS SAVED TO SERVER. Pure streaming proxy with decryption."""
+    """YouTube CDN → FFmpeg reverse XOR → pipe to client. NO DISK WRITES."""
     passkey = request.args.get("key", "") or request.headers.get("X-Key", "")
     if not passkey:
-        return jsonify({"error": "Decryption key required (?key=YOUR_KEY)"}), 401
+        return jsonify({"error": "Key required (?key=YOUR_KEY)"}), 401
 
-    # Get key values
     key_bytes = derive_key_bytes(passkey)
     kr, kg, kb = key_bytes[0], key_bytes[1], key_bytes[2]
 
-    # Check vault for key verification (optional)
+    # Verify key
     db = load_db()
-    vault_info = db.get("vault", {}).get(video_id)
-    if vault_info:
-        expected_hash = vault_info.get("key_hash", "")
-        provided_hash = hashlib.sha256(passkey.encode()).hexdigest()[:16]
-        if provided_hash != expected_hash:
+    info = db.get("vault", {}).get(video_id)
+    if info:
+        expected = info.get("key_hash", "")
+        provided = hashlib.sha256(passkey.encode()).hexdigest()[:16]
+        if provided != expected:
             return jsonify({"error": "Wrong key"}), 403
 
     # Get YouTube CDN URL
@@ -512,13 +579,12 @@ def decrypt_stream(video_id):
     if not cdn_url:
         return jsonify({"error": f"CDN failed: {err}"}), 500
 
-    # FFmpeg: fetch from YouTube CDN → reverse XOR → pipe to stdout
-    # This runs entirely in RAM, no disk writes!
-    # Reverse XOR: XOR with same values reverses the encryption
+    geq = make_geq_filter(kr, kg, kb)
+
     cmd = [
         "ffmpeg",
         "-i", cdn_url,
-        "-vf", f"geq=r='bitxor(r(X,Y),{kr})':g='bitxor(g(X,Y),{kg})':b='bitxor(b(X,Y),{kb})'",
+        "-vf", geq,
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
         "-c:a", "aac", "-b:a", "128k",
         "-movflags", "frag_keyframe+empty_moov+faststart",
@@ -528,8 +594,7 @@ def decrypt_stream(video_id):
 
     try:
         process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env=SUB_ENV
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=SUB_ENV
         )
 
         def generate():
@@ -543,25 +608,21 @@ def decrypt_stream(video_id):
                 process.stdout.close()
                 process.wait()
 
-        return Response(
-            generate(),
-            mimetype="video/mp4",
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Content-Disposition": "inline",
-                "Transfer-Encoding": "chunked",
-            }
-        )
+        return Response(generate(), mimetype="video/mp4", headers={
+            "Access-Control-Allow-Origin": "*",
+            "Content-Disposition": "inline",
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/vault", methods=["GET"])
 def list_vault():
-    """List all encrypted YouTube videos in vault."""
     db = load_db()
     items = []
     for vid, info in db.get("vault", {}).items():
+        if vid in _push_jobs:
+            info["live_status"] = _push_jobs[vid]["status"]
         items.append({**info, "id": vid})
     return jsonify({"vault": items})
 
@@ -583,29 +644,17 @@ def fsize(b):
     return f"{b/1073741824:.1f}GB"
 
 
-# ====== CLEANUP JOB ======
-def cleanup_temp():
-    """Clean up old encrypted files (>24h) from vault dir."""
-    import glob
-    cutoff = time.time() - 86400
-    for f in VAULT_DIR.glob("*_encrypted.mp4"):
-        if f.stat().st_mtime < cutoff:
-            f.unlink(missing_ok=True)
-
-
 if __name__ == "__main__":
     update_ytdlp()
-    cleanup_temp()
     print("📺 YouTube HLS Streaming Server")
     print(f"📂 HLS Cache: {HLS_DIR}")
-    print(f"🔒 Vault temp: {VAULT_DIR}")
+    print(f"🔒 Vault: {VAULT_DIR}")
     print(f"🍪 Cookies: {COOKIES_FILE} ({'✅' if COOKIES_FILE.exists() else '❌'})")
     print(f"🌐 http://localhost:{PORT}")
     print(f"\n📡 Endpoints:")
-    print(f"   /proxy/VIDEO_ID         → Direct proxy stream (YouTube)")
-    print(f"   /api/cdn/VIDEO_ID       → Get YouTube CDN URL")
-    print(f"   /api/encrypt            → Upload + encrypt video (XOR pixels)")
-    print(f"   /download/UID           → Download encrypted MP4")
-    print(f"   /decrypt/VID?key=xxx    → YouTube CDN → decrypt → stream (no disk)")
-    print(f"   /api/vault              → Manage encrypted video IDs")
+    print(f"   /proxy/VID            → Direct proxy (YouTube)")
+    print(f"   /api/cdn/VID          → CDN URL")
+    print(f"   /api/encrypt          → Encrypt + RTMP push to YT Live")
+    print(f"   /decrypt/VID?key=xxx  → CDN → decrypt → stream (no disk)")
+    print(f"   /api/vault            → Manage encrypted videos")
     app.run(host="0.0.0.0", port=PORT, debug=True, threaded=True)

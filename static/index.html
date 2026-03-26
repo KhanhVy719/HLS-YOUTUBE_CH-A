@@ -9,35 +9,30 @@
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     :root{--bg:#0a0a0f;--bg2:#12121a;--border:#1e1e30;--text:#e4e4ef;--dim:#8888a4;
-    --accent:#6c5ce7;--glow:rgba(108,92,231,0.25);--green:#00e676;--red:#ff5252;
+    --accent:#6c5ce7;--glow:rgba(108,92,231,.25);--green:#00e676;--red:#ff5252;
     --orange:#ff9100;--yt:#ff0000;--radius:14px;--cyan:#00bcd4;}
     body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
-
     .header{padding:1.2rem 2rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px;}
     .logo{font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,var(--yt),#ff6b6b,var(--accent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
     .pills{display:flex;gap:8px;flex-wrap:wrap;}
     .pill{padding:4px 12px;border-radius:20px;font-size:.7rem;font-weight:600;border:1px solid var(--border);}
     .pill.ok{color:var(--green);border-color:rgba(0,230,118,.3);background:rgba(0,230,118,.08);}
     .pill.warn{color:var(--orange);border-color:rgba(255,145,0,.3);background:rgba(255,145,0,.08);}
-
     .container{max-width:1200px;margin:0 auto;padding:1.5rem 2rem;}
     .tabs{display:flex;gap:4px;margin-bottom:1.2rem;}
     .tab{padding:8px 18px;border-radius:10px 10px 0 0;font-size:.82rem;font-weight:600;cursor:pointer;background:var(--bg2);border:1px solid var(--border);border-bottom:none;color:var(--dim);transition:.2s;}
     .tab.active{background:var(--bg);color:var(--accent);border-color:var(--accent);}
     .tab:hover{color:var(--text);}
     .tab-content{display:none;}.tab-content.active{display:block;}
-
     .box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;margin-bottom:1.2rem;}
     .row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center;}
     .row:last-child{margin-bottom:0;}
-    .row label{font-size:.78rem;font-weight:600;color:var(--dim);min-width:70px;}
+    .row label{font-size:.78rem;font-weight:600;color:var(--dim);min-width:80px;}
     .inp{padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.85rem;outline:none;flex:1;min-width:150px;}
-    .inp:focus{border-color:var(--accent);}
-    .inp::placeholder{color:var(--dim);}
+    .inp:focus{border-color:var(--accent);}.inp::placeholder{color:var(--dim);}
     .key-inp{font-family:'Courier New',monospace!important;letter-spacing:1px;color:var(--cyan)!important;}
     .progress-bar{width:100%;height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-top:8px;display:none;}
     .progress-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--accent));border-radius:3px;transition:width .3s;width:0%;}
-
     .btn{padding:8px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:600;font-size:.8rem;cursor:pointer;transition:.2s;white-space:nowrap;}
     .btn:hover{transform:translateY(-1px);}.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;}
     .btn-yt{background:linear-gradient(135deg,var(--yt),#cc0000);color:#fff;}
@@ -47,7 +42,6 @@
     .btn-ghost:hover{color:var(--text);border-color:var(--accent);}
     .btn-danger{background:rgba(255,82,82,.1);color:var(--red);border:1px solid rgba(255,82,82,.2);}
     .btn-sm{padding:5px 10px;font-size:.72rem;border-radius:8px;}
-
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;}
     .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:.3s;}
     .card:hover{border-color:var(--accent);box-shadow:0 0 20px var(--glow);transform:translateY(-2px);}
@@ -64,11 +58,12 @@
     .badge-new{background:rgba(255,145,0,.2);color:var(--orange);}
     .badge-err{background:rgba(255,82,82,.2);color:var(--red);}
     .badge-enc{background:rgba(0,188,212,.2);color:var(--cyan);}
+    .badge-live{background:rgba(255,0,0,.3);color:#ff4444;animation:pulse 1s infinite;}
+    @keyframes pulse{50%{opacity:.6;}}
     .info{padding:.7rem 1rem;}
     .title{font-size:.85rem;font-weight:600;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .meta{font-size:.72rem;color:var(--dim);margin-bottom:6px;}
     .actions{display:flex;gap:5px;flex-wrap:wrap;}
-
     .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
     .overlay.on{display:flex;}
     .modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:92%;max-width:960px;overflow:hidden;animation:up .3s ease;}
@@ -80,14 +75,11 @@
     .mf{padding:.6rem 1rem;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
     .ub{flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:.72rem;color:var(--accent);font-family:monospace;word-break:break-all;min-width:200px;}
     .kr{padding:.6rem 1.2rem;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border);}
-
     .empty{grid-column:1/-1;text-align:center;padding:4rem;color:var(--dim);}
     .empty .ic{font-size:3rem;margin-bottom:1rem;}
-
-    .step{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin-bottom:.8rem;}
-    .step-n{font-size:.85rem;font-weight:700;margin-bottom:.5rem;color:var(--cyan);}
-    .step p{font-size:.78rem;color:var(--dim);line-height:1.5;}
-
+    .step{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:.6rem 1rem;margin-bottom:.6rem;}
+    .step-n{font-size:.8rem;font-weight:700;color:var(--cyan);}
+    .step p{font-size:.72rem;color:var(--dim);line-height:1.4;}
     .toast{position:fixed;bottom:20px;right:20px;padding:10px 18px;border-radius:10px;font-size:.8rem;font-weight:500;z-index:2000;display:none;animation:si .3s;max-width:400px;}
     @keyframes si{from{transform:translateX(100px);opacity:0;}}
     .toast.success{background:rgba(0,230,118,.15);color:var(--green);border:1px solid rgba(0,230,118,.3);}
@@ -96,7 +88,6 @@
   </style>
 </head>
 <body>
-
 <div class="header">
   <div class="logo">📺 YouTube HLS Server</div>
   <div class="pills">
@@ -105,11 +96,10 @@
     <span class="pill" id="pCookie">cookies ?</span>
   </div>
 </div>
-
 <div class="container">
   <div class="tabs">
     <div class="tab active" onclick="sTab('yt')">🎬 YouTube</div>
-    <div class="tab" onclick="sTab('enc')">🔒 Mã hóa & Giải mã</div>
+    <div class="tab" onclick="sTab('enc')">🔒 Mã hóa → YT Live</div>
   </div>
 
   <!-- YouTube Tab -->
@@ -121,13 +111,23 @@
     <div class="grid" id="ytGrid"></div>
   </div>
 
-  <!-- Encrypt/Decrypt Tab -->
+  <!-- Encrypt Tab -->
   <div class="tab-content" id="tab-enc">
+    <!-- Stream Key Config -->
+    <div class="box" style="border-color:rgba(255,0,0,.2)">
+      <div class="row">
+        <label>📡 Stream Key</label>
+        <input class="inp key-inp" id="skInput" placeholder="YouTube Live Stream Key" type="password">
+        <button class="btn btn-ghost btn-sm" onclick="tv('skInput')">👁</button>
+        <button class="btn btn-yt btn-sm" onclick="saveSK()">💾 Lưu</button>
+        <span id="skStatus" style="font-size:.72rem;color:var(--dim)"></span>
+      </div>
+    </div>
 
-    <!-- Step 1: Encrypt -->
+    <!-- Step 1: Encrypt + Push -->
     <div class="step">
-      <div class="step-n">Bước 1: Mã hóa video</div>
-      <p>Upload video → mã hóa pixel XOR → tải file mã hóa → upload lên YouTube</p>
+      <div class="step-n">Bước 1: Mã hóa pixel + Push lên YouTube Live</div>
+      <p>Upload video → FFmpeg XOR pixel → Push RTMP lên YouTube livestream → YouTube lưu lại</p>
     </div>
     <div class="box" style="border-color:rgba(0,188,212,.2)">
       <div class="row">
@@ -135,22 +135,25 @@
         <input type="file" class="inp" id="encFile" accept=".mp4,.mkv,.avi,.mov,.webm,.flv,.ts,.m4v">
       </div>
       <div class="row">
-        <label>🔑 Key</label>
-        <input class="inp key-inp" id="encKey" placeholder="Nhập key mã hóa" type="password">
+        <label>🔑 Enc Key</label>
+        <input class="inp key-inp" id="encKey" placeholder="Key mã hóa (bắt buộc)" type="password">
         <button class="btn btn-ghost btn-sm" onclick="tv('encKey')">👁</button>
       </div>
       <div class="row">
-        <button class="btn btn-cyan" onclick="encryptVideo()" id="encBtn">🔒 Mã hóa video</button>
+        <label>📝 Title</label>
+        <input class="inp" id="encTitle" placeholder="Tên video (tùy chọn)">
+      </div>
+      <div class="row">
+        <button class="btn btn-cyan" onclick="encryptPush()" id="encBtn">🔒 Mã hóa & Push YT Live</button>
         <span id="encSt" style="font-size:.78rem;color:var(--dim)"></span>
       </div>
       <div class="progress-bar" id="encProg"><div class="progress-fill" id="encFill"></div></div>
-      <div id="encResult" style="margin-top:8px"></div>
     </div>
 
-    <!-- Step 2: Add YouTube video ID -->
+    <!-- Step 2: Link YouTube Video ID -->
     <div class="step">
-      <div class="step-n">Bước 2: Thêm video YouTube đã mã hóa</div>
-      <p>Sau khi upload file mã hóa lên YouTube → paste Video ID + key vào đây</p>
+      <div class="step-n">Bước 2: Thêm video đã mã hóa (nhập Video ID nếu biết)</div>
+      <p>Sau khi livestream xong, YouTube tạo video → nhập Video ID + key vào đây để stream giải mã</p>
     </div>
     <div class="box" style="border-color:rgba(0,188,212,.2)">
       <div class="row">
@@ -158,23 +161,23 @@
         <input class="inp" id="vaultVid" placeholder="YouTube Video ID (vd: dQw4w9WgXcQ)">
       </div>
       <div class="row">
-        <label>🔑 Key</label>
+        <label>🔑 Enc Key</label>
         <input class="inp key-inp" id="vaultKey" placeholder="Key đã dùng để mã hóa" type="password">
         <button class="btn btn-ghost btn-sm" onclick="tv('vaultKey')">👁</button>
       </div>
       <div class="row">
         <label>📝 Title</label>
-        <input class="inp" id="vaultTitle" placeholder="Tên video (tùy chọn)">
+        <input class="inp" id="vaultTitle" placeholder="Tên (tùy chọn)">
       </div>
       <div class="row">
         <button class="btn btn-accent" onclick="addVault()">+ Thêm vào Vault</button>
       </div>
     </div>
 
-    <!-- Step 3: Vault list -->
+    <!-- Vault Grid -->
     <div class="step">
-      <div class="step-n">Bước 3: Stream giải mã (không tải file về server)</div>
-      <p>YouTube CDN → VPS giải mã XOR trong RAM → stream cho người dùng</p>
+      <div class="step-n">📦 Vault — Video mã hóa trên YouTube</div>
+      <p>Stream giải mã: YouTube CDN → VPS giải mã XOR trong RAM → stream cho client (không tải file)</p>
     </div>
     <div class="grid" id="vGrid"></div>
   </div>
@@ -210,6 +213,20 @@ async function loadStatus(){
   }catch(e){}
 }
 
+// ===== STREAM KEY =====
+async function loadSK(){
+  try{const d=await(await fetch('/api/streamkey')).json();
+  document.getElementById('skStatus').textContent=d.has_key?`✅ ${d.masked}`:'⚠️ Chưa set';
+  }catch(e){}
+}
+async function saveSK(){
+  const key=document.getElementById('skInput').value.trim();
+  if(!key)return toast('Nhập stream key!','error');
+  try{const r=await fetch('/api/streamkey',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+  const d=await r.json();if(d.success){toast('✅ Stream key saved!','success');loadSK();}else toast(`❌ ${d.error}`,'error');
+  }catch(e){toast('Error','error');}
+}
+
 // ===== YOUTUBE =====
 async function loadVideos(){
   try{const d=await(await fetch('/api/videos')).json();const g=document.getElementById('ytGrid');
@@ -232,19 +249,26 @@ async function loadVideos(){
 // ===== VAULT =====
 async function loadVault(){
   try{const d=await(await fetch('/api/vault')).json();const g=document.getElementById('vGrid');
-  if(!d.vault.length){g.innerHTML=`<div class="empty"><div class="ic">🔒</div>Chưa có video mã hóa.<br>Encrypt → Upload YouTube → Thêm Video ID</div>`;return;}
-  g.innerHTML=d.vault.map(v=>`
-    <div class="card enc"><div class="thumb" onclick="openDecrypt('${v.id}','${esc(v.title)}')">
-      <div style="color:var(--cyan);font-size:2.5rem">🔒</div>
+  if(!d.vault.length){g.innerHTML=`<div class="empty"><div class="ic">🔒</div>Chưa có video mã hóa.</div>`;return;}
+  g.innerHTML=d.vault.map(v=>{
+    const st=v.status||'';
+    const isLive=st==='streaming'||st==='pushing';
+    const isDone=st==='done'||st==='ready';
+    const isErr=st.startsWith('error');
+    const bc=isLive?'badge-live':isDone?'badge-enc':isErr?'badge-err':'badge-new';
+    const bt=isLive?'🔴 LIVE':isDone?'🔐 Ready':isErr?'❌':st||'⏳';
+    const hasYtId=v.yt_video_id&&v.yt_video_id!==v.id;
+    return `<div class="card enc"><div class="thumb" onclick="${isDone&&v.yt_video_id?`openDecrypt('${v.yt_video_id||v.id}','${esc(v.title)}')`:''}">
+      <div style="color:var(--cyan);font-size:2.5rem">${isLive?'📡':'🔒'}</div>
       <div class="ov"><div class="pi teal">▶</div></div>
-      <span class="badge badge-enc">🔐 Encrypted</span>
+      <span class="badge ${bc}">${bt}</span>
     </div><div class="info"><div class="title">${esc(v.title)}</div>
-    <div class="meta">${v.id} • YouTube Encrypted</div>
+    <div class="meta">${v.id}${v.yt_video_id?' • YT: '+v.yt_video_id:''} • ${st}</div>
     <div class="actions">
-      <button class="btn btn-cyan btn-sm" onclick="openDecrypt('${v.id}','${esc(v.title)}')">🔓 Giải mã & Stream</button>
+      ${isDone&&v.yt_video_id?`<button class="btn btn-cyan btn-sm" onclick="openDecrypt('${v.yt_video_id}','${esc(v.title)}')">🔓 Stream</button>`:''}
+      ${isDone&&!v.yt_video_id?`<button class="btn btn-accent btn-sm" onclick="setYtId('${v.id}')">🔗 Set Video ID</button>`:''}
       <button class="btn btn-danger btn-sm" onclick="delVault('${v.id}')">🗑</button>
-    </div></div></div>
-  `).join('');}catch(e){}
+    </div></div></div>`;}).join('');}catch(e){}
 }
 
 // ===== ADD YT =====
@@ -256,33 +280,37 @@ async function addYt(){
   }catch(e){toast('Error','error');}btn.disabled=false;btn.textContent='+ Thêm';
 }
 
-// ===== ENCRYPT VIDEO =====
-function encryptVideo(){
+// ===== ENCRYPT + PUSH =====
+function encryptPush(){
   const f=document.getElementById('encFile'),key=document.getElementById('encKey').value.trim(),
-    btn=document.getElementById('encBtn'),st=document.getElementById('encSt'),res=document.getElementById('encResult');
+    title=document.getElementById('encTitle').value.trim(),btn=document.getElementById('encBtn'),
+    st=document.getElementById('encSt'),sk=document.getElementById('skInput').value.trim();
   if(!f.files.length)return toast('Chọn file video!','error');
   if(!key)return toast('Nhập key mã hóa!','error');
-  const form=new FormData();form.append('file',f.files[0]);form.append('key',key);
+  const form=new FormData();form.append('file',f.files[0]);form.append('key',key);form.append('title',title);
+  if(sk)form.append('stream_key',sk);
   btn.disabled=true;btn.textContent='⏳ Uploading...';
   const prog=document.getElementById('encProg'),fill=document.getElementById('encFill');prog.style.display='block';
   const xhr=new XMLHttpRequest();
-  xhr.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.round(e.loaded/e.total*100);fill.style.width=p+'%';st.textContent=p<100?`Upload ${p}%...`:'🔒 Đang mã hóa pixel...';}};
+  xhr.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.round(e.loaded/e.total*100);fill.style.width=p+'%';st.textContent=p<100?`Upload ${p}%...`:'🔒 Encrypting + Pushing...';}};
   xhr.onload=()=>{
     try{const d=JSON.parse(xhr.responseText);
-    if(d.success){
-      toast('🔒 Mã hóa xong!','success');st.textContent='✅';
-      res.innerHTML=`<div class="box" style="border-color:var(--green)">
-        <p style="font-size:.8rem;color:var(--green);margin-bottom:8px">✅ Mã hóa thành công!</p>
-        <a href="${d.enc_file}" class="btn btn-cyan btn-sm" download>📥 Tải file mã hóa (${fsize(d.size)})</a>
-        <p style="font-size:.72rem;color:var(--dim);margin-top:8px">→ Upload file này lên YouTube → lấy Video ID → paste vào Bước 2</p>
-      </div>`;
-    }else{toast(`❌ ${d.error}`,'error');st.textContent='❌';res.innerHTML='';}
+    if(d.success){toast(`🔒 ${d.message}`,'success');st.textContent='📡 Pushing...';loadVault();loadStatus();}
+    else{toast(`❌ ${d.error}`,'error');st.textContent='❌';}
     }catch(e){toast('Error','error');st.textContent='❌';}
-    btn.disabled=false;btn.textContent='🔒 Mã hóa video';
+    btn.disabled=false;btn.textContent='🔒 Mã hóa & Push YT Live';
     setTimeout(()=>{prog.style.display='none';fill.style.width='0%';},2000);
   };
-  xhr.onerror=()=>{toast('Upload failed','error');btn.disabled=false;btn.textContent='🔒 Mã hóa video';st.textContent='❌';};
+  xhr.onerror=()=>{toast('Upload failed','error');btn.disabled=false;btn.textContent='🔒 Mã hóa & Push YT Live';st.textContent='❌';};
   xhr.open('POST','/api/encrypt');xhr.send(form);
+}
+
+// ===== SET YOUTUBE VIDEO ID =====
+function setYtId(uid){
+  const vid=prompt('Nhập YouTube Video ID của livestream đã xong:');
+  if(!vid)return;
+  fetch(`/api/vault/${uid}/setid`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_id:vid})})
+  .then(r=>r.json()).then(d=>{if(d.success){toast('✅ Linked!','success');loadVault();}else toast(`❌ ${d.error}`,'error');});
 }
 
 // ===== ADD VAULT =====
@@ -290,9 +318,9 @@ async function addVault(){
   const vid=document.getElementById('vaultVid').value.trim(),key=document.getElementById('vaultKey').value.trim(),
     title=document.getElementById('vaultTitle').value.trim();
   if(!vid)return toast('Nhập YouTube Video ID!','error');
-  if(!key)return toast('Nhập key giải mã!','error');
+  if(!key)return toast('Nhập key!','error');
   try{const r=await fetch('/api/vault/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_id:vid,key,title})});
-  const d=await r.json();if(d.success){toast('✅ Đã thêm vào Vault!','success');document.getElementById('vaultVid').value='';loadVault();loadStatus();}
+  const d=await r.json();if(d.success){toast('✅ Added!','success');document.getElementById('vaultVid').value='';loadVault();loadStatus();}
   else toast(`❌ ${d.error}`,'error');}catch(e){toast('Error','error');}
 }
 
@@ -305,23 +333,22 @@ function openDecrypt(vid,title){
       <span style="font-size:.8rem;color:var(--cyan)">🔑</span>
       <input class="inp key-inp" id="playKey" type="password" placeholder="Nhập key giải mã" style="flex:1">
       <button class="btn btn-ghost btn-sm" onclick="tv('playKey')">👁</button>
-      <button class="btn btn-cyan btn-sm" onclick="startDecrypt('${vid}')">▶ Giải mã & Stream</button>
+      <button class="btn btn-cyan btn-sm" onclick="startDecrypt('${vid}')">▶ Giải mã</button>
     </div>`;
   document.getElementById('modal').classList.add('on');
   const v=document.getElementById('vid');v.pause();v.removeAttribute('src');v.load();
 }
-
 function startDecrypt(vid){
   const key=document.getElementById('playKey').value.trim();
-  if(!key)return toast('Nhập key giải mã!','error');
-  toast('🔄 Fetching from YouTube CDN + Decrypting...','info');
+  if(!key)return toast('Nhập key!','error');
+  toast('🔄 YouTube CDN → Decrypt → Stream...','info');
   const url=`/decrypt/${vid}?key=${encodeURIComponent(key)}`;
   curUrl=`${location.origin}${url}`;document.getElementById('mUrl').textContent=curUrl;
   const v=document.getElementById('vid');if(hls){hls.destroy();hls=null;}
-  v.src=url;v.play().catch(()=>toast('❌ Sai key hoặc video không tìm thấy','error'));
+  v.src=url;v.play().catch(()=>toast('❌ Sai key hoặc video lỗi','error'));
 }
 
-// ===== PLAYERS =====
+// ===== STANDARD PLAYERS =====
 function playProxy(id){
   curUrl=`${location.origin}/proxy/${id}`;document.getElementById('mTitle').textContent=id;
   document.getElementById('mUrl').textContent=curUrl;document.getElementById('mKeyRow').innerHTML='';
@@ -342,8 +369,8 @@ function closeP(){document.getElementById('modal').classList.remove('on');const 
 async function getCdn(id){
   toast('🔄 Extracting CDN...','info');
   try{const r=await fetch(`/api/cdn/${id}`);const d=await r.json();
-  if(d.url){cc(d.url).then(()=>toast(`📋 CDN URL copied! (${Math.round(d.expires_in/60)}min)`,'success')).catch(()=>prompt('Copy:',d.url));loadVideos();}
-  else toast(`❌ ${d.error}`,'error');}catch(e){toast(`Error`,'error');}
+  if(d.url){cc(d.url).then(()=>toast(`📋 CDN copied! (${Math.round(d.expires_in/60)}min)`,'success'));loadVideos();}
+  else toast(`❌ ${d.error}`,'error');}catch(e){toast('Error','error');}
 }
 async function prep(id,btn){
   if(btn){btn.disabled=true;btn.textContent='⏳';}toast('🔄 Transcoding...','info');
@@ -355,8 +382,8 @@ async function prep(id,btn){
 async function delYt(id){if(!confirm(`Xóa ${id}?`))return;await fetch(`/api/videos/${id}`,{method:'DELETE'});toast('🗑','info');loadVideos();loadStatus();}
 async function delVault(id){if(!confirm(`Xóa vault ${id}?`))return;await fetch(`/api/vault/${id}`,{method:'DELETE'});toast('🗑','info');loadVault();loadStatus();}
 
-loadStatus();loadVideos();loadVault();
-setInterval(()=>{loadStatus();loadVideos();loadVault();},15000);
+loadStatus();loadSK();loadVideos();loadVault();
+setInterval(()=>{loadStatus();loadVideos();loadVault();},10000);
 </script>
 </body>
 </html>
