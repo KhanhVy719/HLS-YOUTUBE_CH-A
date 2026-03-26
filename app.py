@@ -362,10 +362,12 @@ def derive_key_bytes(passphrase):
 
 
 def write_filter_file(uid, kr, kg, kb):
-    """Write FFmpeg lutrgb filter to a temp file to avoid escaping issues.
-    lutrgb is a fast lookup-table based filter (vs slow geq per-pixel eval).
-    XOR is self-reversing: encrypt and decrypt use the same filter."""
-    filter_str = f"lutrgb=r='bitxor(val,{kr})':g='bitxor(val,{kg})':b='bitxor(val,{kb})'"
+    """Write FFmpeg lutrgb filter to a temp file to avoid subprocess escaping.
+    lutrgb = fast lookup-table. XOR is self-reversing (same filter for enc/dec).
+    Commas in bitxor(val,N) MUST be escaped as \\, in FFmpeg filter syntax."""
+    # Each comma inside bitxor(val,N) needs a single \ before it in FFmpeg syntax
+    bs = "\\"  # single backslash
+    filter_str = f"lutrgb=r=bitxor(val{bs},{kr}):g=bitxor(val{bs},{kg}):b=bitxor(val{bs},{kb})"
     fpath = VAULT_DIR / f"{uid}_filter.txt"
     fpath.write_text(filter_str)
     return str(fpath)
